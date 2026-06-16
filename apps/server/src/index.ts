@@ -3,7 +3,7 @@ import express from 'express';
 import cors from 'cors';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { createDb } from '@game-lobby/db';
+import { createDb, createPgliteDb } from '@game-lobby/db';
 import { authRouter } from './routes/auth.js';
 import { roomsRouter } from './routes/rooms.js';
 import { authMiddleware } from './middleware/auth.js';
@@ -11,11 +11,13 @@ import { setupSocketHandlers } from './socket/index.js';
 import { RoomManager } from './services/room-manager.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
-const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5173';
+const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5273';
 const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/game_lobby';
 
-const { db, pool } = createDb(DATABASE_URL);
+const usePglite =
+  process.env.DB_DRIVER === 'pglite' || DATABASE_URL.startsWith('pglite');
+const { db, pool } = usePglite ? await createPgliteDb() : createDb(DATABASE_URL);
 const roomManager = new RoomManager(db);
 
 const app = express();

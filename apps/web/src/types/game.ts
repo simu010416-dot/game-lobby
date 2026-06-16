@@ -22,9 +22,12 @@ export interface UndercoverGameState {
   message: string;
 }
 
+export type DaVinciColor = 'black' | 'white';
+
 export interface DaVinciTile {
-  color: 'black' | 'white';
-  value: number;
+  color: DaVinciColor;
+  value: number; // -1 means hidden from this viewer
+  revealed: boolean;
 }
 
 export interface DaVinciPlayerState {
@@ -32,20 +35,29 @@ export interface DaVinciPlayerState {
   name: string;
   isBot: boolean;
   rack: DaVinciTile[];
-  isActive: boolean;
+  eliminated: boolean;
+}
+
+export interface DaVinciLastAction {
+  guesserId: string;
+  guesserName: string;
+  targetId: string;
+  targetName: string;
+  position: number;
+  color: DaVinciColor;
+  guessedValue: number;
+  correct: boolean;
 }
 
 export interface DaVinciGameState {
   phase: 'playing' | 'ended';
+  stage: 'guessing' | 'deciding';
   players: DaVinciPlayerState[];
   currentPlayerIndex: number;
-  tableSequence: DaVinciTile[];
-  lastGuess: {
-    playerId: string;
-    targetPlayerId: string;
-    guess: DaVinciTile[];
-    result: { exact: number; colorOnly: number };
-  } | null;
+  deck: DaVinciTile[];
+  deckCount: number;
+  drawnTile: DaVinciTile | null;
+  lastAction: DaVinciLastAction | null;
   winnerId: string | null;
   message: string;
 }

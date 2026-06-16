@@ -6,6 +6,7 @@ export const users = pgTable('users', {
   passwordHash: varchar('password_hash', { length: 255 }).notNull(),
   displayName: varchar('display_name', { length: 64 }).notNull(),
   avatarColor: varchar('avatar_color', { length: 7 }).notNull().default('#6366f1'),
+  isGuest: boolean('is_guest').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 

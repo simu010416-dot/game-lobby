@@ -43,13 +43,29 @@ cd game-lobby
 pnpm install
 ```
 
-### 3. 配置数据库
+### 3. 配置环境变量与数据库
 
-复制环境变量并按需修改：
+各子包从**各自目录**读取 `.env`，不会自动继承仓库根目录的配置。以根目录的 `.env.example` 为模板，按需复制到以下位置：
+
+**数据库命令**（`pnpm db:push` / `db:migrate` 等）：
 
 ```bash
-cp .env.example .env
+cp .env.example packages/db/.env
 ```
+
+编辑 `packages/db/.env`，至少设置 `DATABASE_URL`。
+
+**后端服务**：
+
+```bash
+cp .env.example apps/server/.env
+```
+
+编辑 `apps/server/.env`，至少设置 `DATABASE_URL`；可按需调整 `PORT`、`JWT_SECRET`、`CORS_ORIGIN`。
+
+**前端**（可选）：
+
+开发模式下 Vite 会通过代理访问 `/api`，`VITE_*` 也有默认值，一般无需配置。若需自定义 API 或 WebSocket 地址，可复制模板到 `apps/web/.env` 并设置 `VITE_API_URL`、`VITE_WS_URL`。
 
 创建数据库：
 
@@ -69,7 +85,7 @@ pnpm db:push
 pnpm dev
 ```
 
-- 前端：http://localhost:5173
+- 前端：http://localhost:5273
 - 后端：http://localhost:3001
 
 ## 功能概览

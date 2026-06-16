@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import type { RoomDetail } from '@game-lobby/shared';
 import {
   ALL_AI_DIFFICULTIES,
@@ -12,8 +12,10 @@ import {
 import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
 import {
+  closeRoom,
   emitAddBot,
-  emitDaVinciPlay,
+  emitDaVinciDecision,
+  emitDaVinciGuess,
   emitSetRoles,
   emitStartGame,
   emitUndercoverDescribe,
@@ -23,6 +25,8 @@ import {
   joinRoom,
   leaveRoom,
   onGameState,
+  onRoomClosed,
+  onRoomKicked,
   onRoomUpdated,
 } from '../lib/socket';
 import { UndercoverGame } from '../components/games/UndercoverGame';
@@ -31,8 +35,11 @@ import type { DaVinciGameState, UndercoverGameState } from '../types/game';
 
 export function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
+  const navigate = useNavigate();
   const { token, user } = useAuth();
   const [room, setRoom] = useState<RoomDetail | null>(null);
+  const [closed, setClosed] = useState(false);
+  const [kicked, setKicked] = useState(false);
   const [gameType, setGameType] = useState<GameType | null>(null);
   const [gameState, setGameState] = useState<unknown>(null);
   const [error, setError] = useState('');
@@ -69,12 +76,26 @@ export function RoomPage() {
       setGameType(payload.gameType as GameType);
       setGameState(payload.state);
     });
+    const unsubClosed = onRoomClosed((payload) => {
+      if (payload.roomId === roomId) {
+        setClosed(true);
+        navigate('/', { replace: true });
+      }
+    });
+    const unsubKicked = onRoomKicked((payload) => {
+      if (payload.roomId === roomId) {
+        setKicked(true);
+        navigate('/', { replace: true });
+      }
+    });
 
     return () => {
       mounted = false;
       leaveRoom();
       unsubRoom();
       unsubGame();
+      unsubClosed();
+      unsubKicked();
     };
   }, [token, roomId]);
 
@@ -94,16 +115,19 @@ export function RoomPage() {
     await emitAddBot(botDifficulty);
   }
 
-  async function handleSaveQueue() {
+  async function handleStartGame() {
     await emitUpdateQueue(
       selectedQueue.map((g, i) => ({ gameType: g, order: i })),
       queueMode,
     );
-  }
-
-  async function handleStartGame() {
     const res = await emitStartGame();
     if (!res.ok) setError(res.message ?? '无法开始');
+  }
+
+  async function handleCloseRoom() {
+    if (!window.confirm('确定要关闭房间吗？所有玩家将被移出房间。')) return;
+    const res = await closeRoom();
+    if (!res.ok) setError(res.message ?? '无法关闭房间');
   }
 
   async function handleToggleRole(memberId: string) {
@@ -120,6 +144,18 @@ export function RoomPage() {
     }
 
     await emitSetRoles([...active], [...spectators]);
+  }
+
+  if (kicked) {
+    return (
+      <p style={{ color: 'var(--text-muted)' }}>
+        你已在其他位置加入了新房间，正在返回大厅…
+      </p>
+    );
+  }
+
+  if (closed) {
+    return <p style={{ color: 'var(--text-muted)' }}>房间已关闭，正在返回大厅…</p>;
   }
 
   if (!room) {
@@ -142,6 +178,11 @@ export function RoomPage() {
         <span className={`badge badge-${room.status}`}>
           {room.status === 'playing' ? '游戏中' : '等待中'}
         </span>
+        {isHost && (
+          <button className="btn btn-secondary" onClick={handleCloseRoom}>
+            关闭房间
+          </button>
+        )}
       </div>
 
       {error && <div style={{ color: 'var(--danger)' }}>{error}</div>}
@@ -265,9 +306,6 @@ export function RoomPage() {
                   + {GAME_META[g].name}
                 </button>
               ))}
-              <button className="btn btn-secondary" onClick={handleSaveQueue}>
-                保存队列
-              </button>
             </div>
           )}
 
@@ -280,13 +318,13 @@ export function RoomPage() {
 
           {isHost && room.status !== 'playing' && (
             <button className="btn" style={{ marginTop: '1rem', width: '100%' }} onClick={handleStartGame}>
-              开始下一局
+              保存队列并开始
             </button>
           )}
         </section>
       </div>
 
-      {gameType === 'undercover' && gameState && (
+      {gameType === 'undercover' && gameState != null ? (
         <UndercoverGame
           state={gameState as UndercoverGameState}
           myMemberId={myMember?.id ?? null}
@@ -294,16 +332,17 @@ export function RoomPage() {
           onDescribe={emitUndercoverDescribe}
           onVote={emitUndercoverVote}
         />
-      )}
+      ) : null}
 
-      {gameType === 'da_vinci_code' && gameState && (
+      {gameType === 'da_vinci_code' && gameState != null ? (
         <DaVinciGame
           state={gameState as DaVinciGameState}
           myMemberId={myMember?.id ?? null}
           isSpectator={isSpectator}
-          onPlay={emitDaVinciPlay}
+          onGuess={emitDaVinciGuess}
+          onDecision={emitDaVinciDecision}
         />
-      )}
+      ) : null}
     </div>
   );
 }

@@ -4,22 +4,41 @@ import type { UserProfile } from '@game-lobby/shared';
 
 const JWT_SECRET = process.env.JWT_SECRET ?? 'dev-secret-change-me';
 
+interface JwtPayload {
+  sub: string;
+  username: string;
+  displayName: string;
+  avatarColor: string;
+  isGuest?: boolean;
+}
+
 export interface AuthRequest extends Request {
   user?: UserProfile;
 }
 
 export function signToken(user: UserProfile): string {
-  return jwt.sign({ sub: user.id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
+  return jwt.sign(
+    {
+      sub: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      avatarColor: user.avatarColor,
+      isGuest: user.isGuest ?? false,
+    },
+    JWT_SECRET,
+    { expiresIn: '7d' },
+  );
 }
 
 export function verifyToken(token: string): UserProfile | null {
   try {
-    const payload = jwt.verify(token, JWT_SECRET) as { sub: string; username: string };
+    const payload = jwt.verify(token, JWT_SECRET) as JwtPayload;
     return {
       id: payload.sub,
       username: payload.username,
-      displayName: payload.username,
-      avatarColor: '#6366f1',
+      displayName: payload.displayName,
+      avatarColor: payload.avatarColor,
+      isGuest: payload.isGuest ?? false,
     };
   } catch {
     return null;

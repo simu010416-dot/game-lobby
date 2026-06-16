@@ -19,12 +19,14 @@
     "push": "drizzle-kit push"
   },
   "dependencies": {
-    "drizzle-orm": "^0.38.3",
+    "drizzle-orm": "^0.45.2",
     "pg": "^8.13.1"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.2",
     "@types/pg": "^8.11.10",
-    "drizzle-kit": "^0.30.1",
+    "dotenv": "^16.4.7",
+    "drizzle-kit": "^0.31.10",
     "typescript": "^5.7.2"
   }
 }

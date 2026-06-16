@@ -1,4 +1,4 @@
-import { eq, asc } from 'drizzle-orm';
+import { eq, asc, and } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
 import {
   rooms,
@@ -22,8 +22,10 @@ import {
   submitUndercoverVote,
   generateBotDescription,
   generateBotVote,
-  playDaVinciTile,
+  guessDaVinciTile,
+  decideDaVinciContinue,
   generateBotDaVinciMove,
+  generateBotDaVinciDecision,
   type GameState,
   type UndercoverGameState,
   type DaVinciGameState,
@@ -39,8 +41,33 @@ interface InMemoryGame {
 export class RoomManager {
   private games = new Map<string, InMemoryGame>();
   private socketToMember = new Map<string, { roomId: string; memberId: string }>();
+  // Per-key promise chain used to serialize membership mutations and avoid
+  // race conditions (e.g. duplicate members when a client joins twice rapidly).
+  private locks = new Map<string, Promise<unknown>>();
+  // Empty rooms are closed after a grace period so brief disconnects / page
+  // refreshes (incl. React StrictMode double-mount) don't destroy the room.
+  private pendingClose = new Map<string, NodeJS.Timeout>();
+  private onRoomClosed?: (roomId: string) => void;
+  private static readonly EMPTY_ROOM_GRACE_MS = 30_000;
 
   constructor(private db: Database) {}
+
+  setRoomClosedListener(cb: (roomId: string) => void) {
+    this.onRoomClosed = cb;
+  }
+
+  private runExclusive<T>(key: string, task: () => Promise<T>): Promise<T> {
+    const prev = this.locks.get(key) ?? Promise.resolve();
+    const run = prev.then(task, task);
+    this.locks.set(
+      key,
+      run.then(
+        () => undefined,
+        () => undefined,
+      ),
+    );
+    return run;
+  }
 
   async listRooms(): Promise<RoomSummary[]> {
     const allRooms = await this.db.select().from(rooms).orderBy(asc(rooms.createdAt));
@@ -116,46 +143,198 @@ export class RoomManager {
     roomId: string,
     user: { id: string; username: string; displayName: string },
     socketId: string,
-  ): Promise<RoomDetail | null> {
-    const detail = await this.getRoomDetail(roomId);
-    if (!detail) return null;
+  ): Promise<{
+    detail: RoomDetail;
+    leftRooms: { roomId: string; deleted: boolean }[];
+    kickedSockets: { socketId: string; roomId: string }[];
+  } | null> {
+    return this.runExclusive(`room:${roomId}`, async () => {
+      const [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId));
+      if (!room) return null;
 
-    let member = detail.players.find((p) => p.userId === user.id);
-    if (!member) {
-      const [created] = await this.db
-        .insert(roomMembers)
-        .values({
-          roomId,
-          userId: user.id,
-          username: user.username,
-          displayName: user.displayName,
-          role: 'player',
-          isOnline: true,
-        })
-        .returning();
-      member = this.mapMember(created!);
-    } else {
-      await this.db
-        .update(roomMembers)
-        .set({ isOnline: true })
-        .where(eq(roomMembers.id, member.id));
-    }
+      // Someone is (re)joining, so cancel any pending auto-close for this room.
+      this.cancelScheduledClose(roomId);
 
-    this.socketToMember.set(socketId, { roomId, memberId: member.id });
-    return this.getRoomDetail(roomId);
+      // A player may only be in one room at a time: remove them from any others.
+      const { leftRooms, kickedSockets } = await this.removeUserFromOtherRooms(user.id, roomId);
+
+      // Look up existing membership directly so a duplicate is never created,
+      // and clean up any pre-existing duplicates for safety.
+      const existing = await this.db
+        .select()
+        .from(roomMembers)
+        .where(and(eq(roomMembers.roomId, roomId), eq(roomMembers.userId, user.id)));
+
+      let memberId: string;
+      if (existing.length > 0) {
+        memberId = existing[0]!.id;
+        for (const dup of existing.slice(1)) {
+          await this.db.delete(roomMembers).where(eq(roomMembers.id, dup.id));
+        }
+        await this.db
+          .update(roomMembers)
+          .set({ isOnline: true, displayName: user.displayName })
+          .where(eq(roomMembers.id, memberId));
+      } else {
+        const [created] = await this.db
+          .insert(roomMembers)
+          .values({
+            roomId,
+            userId: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            role: 'player',
+            isOnline: true,
+          })
+          .returning();
+        memberId = created!.id;
+      }
+
+      this.socketToMember.set(socketId, { roomId, memberId });
+      const detail = await this.getRoomDetail(roomId);
+      return detail ? { detail, leftRooms, kickedSockets } : null;
+    });
   }
 
-  async leaveRoom(socketId: string): Promise<string | null> {
+  async leaveRoom(socketId: string): Promise<{ roomId: string; deleted: boolean } | null> {
     const mapping = this.socketToMember.get(socketId);
     if (!mapping) return null;
     this.socketToMember.delete(socketId);
 
-    await this.db
-      .update(roomMembers)
-      .set({ isOnline: false })
-      .where(eq(roomMembers.id, mapping.memberId));
+    return this.runExclusive(`room:${mapping.roomId}`, async () => {
+      await this.db
+        .update(roomMembers)
+        .set({ isOnline: false })
+        .where(eq(roomMembers.id, mapping.memberId));
 
-    return mapping.roomId;
+      const deleted = await this.cleanupRoom(mapping.roomId);
+      return { roomId: mapping.roomId, deleted };
+    });
+  }
+
+  async closeRoom(roomId: string, requesterId: string): Promise<boolean> {
+    const detail = await this.getRoomDetail(roomId);
+    const hostMember = detail?.players.find((p) => p.role === 'host');
+    if (!detail || hostMember?.id !== requesterId) return false;
+
+    this.cancelScheduledClose(roomId);
+    await this.db.delete(rooms).where(eq(rooms.id, roomId));
+    this.games.delete(roomId);
+    this.forgetRoomSockets(roomId);
+    return true;
+  }
+
+  // Removes the user from every room except `exceptRoomId`, cleaning up empty
+  // rooms and reassigning the host when needed. Returns the affected rooms and
+  // the still-connected sockets that were viewing those rooms (so they can be
+  // redirected out).
+  private async removeUserFromOtherRooms(
+    userId: string,
+    exceptRoomId: string,
+  ): Promise<{
+    leftRooms: { roomId: string; deleted: boolean }[];
+    kickedSockets: { socketId: string; roomId: string }[];
+  }> {
+    const memberships = await this.db
+      .select()
+      .from(roomMembers)
+      .where(eq(roomMembers.userId, userId));
+
+    const leftRooms: { roomId: string; deleted: boolean }[] = [];
+    const kickedSockets: { socketId: string; roomId: string }[] = [];
+    const otherRoomIds = new Set(
+      memberships.map((m) => m.roomId).filter((id) => id !== exceptRoomId),
+    );
+
+    for (const m of memberships) {
+      if (m.roomId === exceptRoomId) continue;
+      await this.db.delete(roomMembers).where(eq(roomMembers.id, m.id));
+      for (const [sid, map] of this.socketToMember) {
+        if (map.memberId === m.id) {
+          kickedSockets.push({ socketId: sid, roomId: m.roomId });
+          this.socketToMember.delete(sid);
+        }
+      }
+    }
+
+    for (const otherRoomId of otherRoomIds) {
+      const deleted = await this.cleanupRoom(otherRoomId);
+      leftRooms.push({ roomId: otherRoomId, deleted });
+    }
+
+    return { leftRooms, kickedSockets };
+  }
+
+  // Schedules an empty room for deletion (after a grace period) and otherwise
+  // ensures a host still exists. Returns true only on immediate deletion (none
+  // here, since closing is deferred); callers treat the room as still present.
+  private async cleanupRoom(roomId: string): Promise<boolean> {
+    const members = await this.getMembers(roomId);
+    const onlineHumans = members.filter((m) => !m.isBot && m.isOnline);
+
+    if (members.length === 0 || onlineHumans.length === 0) {
+      this.scheduleRoomClose(roomId);
+      return false;
+    }
+
+    // A human is present, so cancel any pending auto-close.
+    this.cancelScheduledClose(roomId);
+
+    // Reassign the host only when the host membership is actually gone (e.g.
+    // kicked or moved to another room) — not for a host that is merely offline.
+    const hasHost = members.some((m) => m.role === 'host');
+    if (!hasHost) {
+      const newHost = onlineHumans[0]!;
+      if (newHost.userId) {
+        await this.db
+          .update(roomMembers)
+          .set({ role: 'host' })
+          .where(eq(roomMembers.id, newHost.id));
+        await this.db
+          .update(rooms)
+          .set({ hostUserId: newHost.userId })
+          .where(eq(rooms.id, roomId));
+      }
+    }
+
+    return false;
+  }
+
+  private scheduleRoomClose(roomId: string) {
+    if (this.pendingClose.has(roomId)) return;
+    const timer = setTimeout(() => {
+      this.pendingClose.delete(roomId);
+      void this.finalizeRoomClose(roomId);
+    }, RoomManager.EMPTY_ROOM_GRACE_MS);
+    if (typeof timer.unref === 'function') timer.unref();
+    this.pendingClose.set(roomId, timer);
+  }
+
+  private cancelScheduledClose(roomId: string) {
+    const timer = this.pendingClose.get(roomId);
+    if (timer) {
+      clearTimeout(timer);
+      this.pendingClose.delete(roomId);
+    }
+  }
+
+  private async finalizeRoomClose(roomId: string) {
+    await this.runExclusive(`room:${roomId}`, async () => {
+      const members = await this.getMembers(roomId);
+      const onlineHumans = members.filter((m) => !m.isBot && m.isOnline);
+      if (onlineHumans.length > 0) return; // someone came back during the grace period
+
+      await this.db.delete(rooms).where(eq(rooms.id, roomId));
+      this.games.delete(roomId);
+      this.forgetRoomSockets(roomId);
+      this.onRoomClosed?.(roomId);
+    });
+  }
+
+  private forgetRoomSockets(roomId: string) {
+    for (const [sid, map] of this.socketToMember) {
+      if (map.roomId === roomId) this.socketToMember.delete(sid);
+    }
   }
 
   async addBot(
@@ -230,7 +409,7 @@ export class RoomManager {
     const members = await this.getMembers(roomId);
     for (const m of members) {
       let role = m.role;
-      if (m.userId === detail.hostId) {
+      if (m.id === detail.hostId) {
         role = 'host';
       } else if (spectatorIds.includes(m.id)) {
         role = 'spectator';
@@ -243,21 +422,53 @@ export class RoomManager {
     return this.getRoomDetail(roomId);
   }
 
-  async startNextGame(roomId: string, requesterId: string): Promise<{ detail: RoomDetail; gameState: GameState; gameType: GameType } | null> {
+  async startNextGame(
+    roomId: string,
+    requesterId: string,
+  ): Promise<
+    | { ok: true; detail: RoomDetail; gameState: GameState; gameType: GameType }
+    | { ok: false; message: string }
+  > {
     const detail = await this.getRoomDetail(roomId);
     const hostMember = detail?.players.find((p) => p.role === 'host');
-    if (!detail || hostMember?.id !== requesterId) return null;
+    if (!detail || hostMember?.id !== requesterId) {
+      return { ok: false, message: '仅房主可开始游戏' };
+    }
 
     const nextGame = this.pickNextGame(detail);
-    if (!nextGame) return null;
+    if (!nextGame) {
+      return { ok: false, message: '游戏队列为空，请先在右侧添加并保存游戏。' };
+    }
+
+    // Bots cannot meaningfully play 谁是卧底 (they rely on natural-language
+    // descriptions), so automatically move them to spectators for this game.
+    if (nextGame === 'undercover') {
+      const activeBots = detail.players.filter((p) => p.isBot && p.role !== 'spectator');
+      for (const bot of activeBots) {
+        await this.db
+          .update(roomMembers)
+          .set({ role: 'spectator' })
+          .where(eq(roomMembers.id, bot.id));
+      }
+    }
+
+    const roster = nextGame === 'undercover' ? await this.getRoomDetail(roomId) : detail;
+    if (!roster) return { ok: false, message: '房间不存在' };
 
     const meta = GAME_META[nextGame];
-    const activePlayers = detail.players.filter(
+    const activePlayers = roster.players.filter(
       (p) => p.role === 'host' || p.role === 'player',
     );
 
     if (activePlayers.length < meta.minPlayers) {
-      return null;
+      const hint =
+        nextGame === 'undercover'
+          ? '（电脑无法参与谁是卧底，已自动设为旁观）'
+          : '';
+      return {
+        ok: false,
+        message: `下一局是「${meta.name}」，需要至少 ${meta.minPlayers} 名玩家，当前仅 ${activePlayers.length} 名。${hint}`,
+      };
     }
 
     const participants = activePlayers.slice(0, meta.maxPlayers).map((p) => ({
@@ -282,7 +493,9 @@ export class RoomManager {
       .where(eq(rooms.id, roomId));
 
     const updated = await this.getRoomDetail(roomId);
-    return updated ? { detail: updated, gameState: state, gameType: nextGame } : null;
+    return updated
+      ? { ok: true, detail: updated, gameState: state, gameType: nextGame }
+      : { ok: false, message: '房间不存在' };
   }
 
   getGame(roomId: string): InMemoryGame | undefined {
@@ -306,21 +519,35 @@ export class RoomManager {
     return game;
   }
 
-  async processDaVinciMove(
+  async processDaVinciGuess(
     roomId: string,
     playerId: string,
     targetPlayerId: string,
     tileIndex: number,
-    position: number,
+    value: number,
   ) {
     const game = this.games.get(roomId);
     if (!game || game.gameType !== 'da_vinci_code') return null;
-    game.state = playDaVinciTile(
+    game.state = guessDaVinciTile(
       game.state as DaVinciGameState,
       playerId,
       targetPlayerId,
       tileIndex,
-      position,
+      value,
+    );
+    if ((game.state as DaVinciGameState).phase === 'ended') {
+      await this.db.update(rooms).set({ status: 'waiting' }).where(eq(rooms.id, roomId));
+    }
+    return game;
+  }
+
+  async processDaVinciDecision(roomId: string, playerId: string, shouldContinue: boolean) {
+    const game = this.games.get(roomId);
+    if (!game || game.gameType !== 'da_vinci_code') return null;
+    game.state = decideDaVinciContinue(
+      game.state as DaVinciGameState,
+      playerId,
+      shouldContinue,
     );
     if ((game.state as DaVinciGameState).phase === 'ended') {
       await this.db.update(rooms).set({ status: 'waiting' }).where(eq(rooms.id, roomId));
@@ -361,19 +588,28 @@ export class RoomManager {
     }
 
     if (game.gameType === 'da_vinci_code') {
-      let state = game.state as DaVinciGameState;
+      const state = game.state as DaVinciGameState;
       const current = state.players[state.currentPlayerIndex];
       const member = detail.players.find((p) => p.id === current?.id);
       if (current?.isBot && member?.botDifficulty && state.phase === 'playing') {
-        const move = generateBotDaVinciMove(state, current.id, member.botDifficulty);
-        state = playDaVinciTile(
-          state,
-          current.id,
-          move.targetPlayerId,
-          move.tileIndex,
-          move.position,
-        );
-        game.state = state;
+        // One atomic step per call (guess OR decide); processBots loops so each
+        // bot action is broadcast separately and the turn animates naturally.
+        if (state.stage === 'guessing') {
+          const move = generateBotDaVinciMove(state, current.id, member.botDifficulty);
+          game.state = guessDaVinciTile(
+            state,
+            current.id,
+            move.targetPlayerId,
+            move.tileIndex,
+            move.value,
+          );
+        } else {
+          const keepGoing = generateBotDaVinciDecision(state, current.id, member.botDifficulty);
+          game.state = decideDaVinciContinue(state, current.id, keepGoing);
+        }
+        if ((game.state as DaVinciGameState).phase === 'ended') {
+          await this.db.update(rooms).set({ status: 'waiting' }).where(eq(rooms.id, roomId));
+        }
       }
     }
 

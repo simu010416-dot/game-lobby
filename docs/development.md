@@ -14,7 +14,7 @@
 | `DATABASE_URL` | `postgresql://postgres:postgres@localhost:5432/game_lobby` | PG 连接串 |
 | `PORT` | `3001` | 服务端端口 |
 | `JWT_SECRET` | `dev-secret-change-me` | JWT 密钥（生产必改） |
-| `CORS_ORIGIN` | `http://localhost:5173` | 允许的前端源 |
+| `CORS_ORIGIN` | `http://localhost:5273` | 允许的前端源 |
 | `VITE_API_URL` | `http://localhost:3001` | 前端 API 地址 |
 | `VITE_WS_URL` | `http://localhost:3001` | 前端 WebSocket 地址 |
 

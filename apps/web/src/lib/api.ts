@@ -29,6 +29,24 @@ export function login(username: string, password: string) {
   });
 }
 
+export function fetchRandomGuestName() {
+  return request<{ displayName: string }>('/api/auth/guest/random-name');
+}
+
+export function guestLogin(displayName?: string) {
+  return request<AuthResponse>('/api/auth/guest', {
+    method: 'POST',
+    body: JSON.stringify({ displayName: displayName || undefined }),
+  });
+}
+
+export function updateProfile(token: string, displayName: string) {
+  return request<AuthResponse>('/api/auth/profile', {
+    method: 'PATCH',
+    body: JSON.stringify({ displayName }),
+  }, token);
+}
+
 export function fetchRooms(token: string) {
   return request<RoomSummary[]>('/api/rooms', {}, token);
 }

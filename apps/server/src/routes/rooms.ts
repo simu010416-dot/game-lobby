@@ -9,7 +9,7 @@ const createRoomSchema = z.object({
   maxPlayers: z.number().int().min(2).max(12).optional(),
 });
 
-export function roomsRouter(db: Database, roomManager: RoomManager) {
+export function roomsRouter(db: Database, roomManager: RoomManager): Router {
   const router = Router();
 
   router.get('/', async (_req, res) => {

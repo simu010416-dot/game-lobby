@@ -6,6 +6,10 @@ const WS_URL = import.meta.env.VITE_WS_URL ?? 'http://localhost:3001';
 let socket: Socket | null = null;
 
 export function getSocket(token: string): Socket {
+  if (socket && (socket.auth as { token?: string }).token !== token) {
+    socket.disconnect();
+    socket = null;
+  }
   if (!socket) {
     socket = io(WS_URL, {
       auth: { token },
@@ -44,6 +48,22 @@ export function onGameState(handler: (payload: { gameType: string; state: unknow
   return () => socket?.off('game:state', handler);
 }
 
+export function onRoomClosed(handler: (payload: { roomId: string }) => void) {
+  socket?.on('room:closed', handler);
+  return () => socket?.off('room:closed', handler);
+}
+
+export function onRoomKicked(handler: (payload: { roomId: string }) => void) {
+  socket?.on('room:kicked', handler);
+  return () => socket?.off('room:kicked', handler);
+}
+
+export function closeRoom() {
+  return new Promise<{ ok: boolean; message?: string }>((resolve) => {
+    socket?.emit('room:close', {}, resolve);
+  });
+}
+
 export function emitAddBot(difficulty: string) {
   return new Promise<{ ok: boolean }>((resolve) => {
     socket?.emit('room:add-bot', { difficulty }, resolve);
@@ -76,8 +96,12 @@ export function emitUndercoverVote(targetId: string) {
   socket?.emit('game:undercover:vote', { targetId });
 }
 
-export function emitDaVinciPlay(targetPlayerId: string, tileIndex: number, position: number) {
-  socket?.emit('game:davinci:play', { targetPlayerId, tileIndex, position });
+export function emitDaVinciGuess(targetPlayerId: string, tileIndex: number, value: number) {
+  socket?.emit('game:davinci:guess', { targetPlayerId, tileIndex, value });
+}
+
+export function emitDaVinciDecision(shouldContinue: boolean) {
+  socket?.emit('game:davinci:decision', { continue: shouldContinue });
 }
 
 export function leaveRoom() {

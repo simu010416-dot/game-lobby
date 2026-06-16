@@ -13,6 +13,7 @@ export interface UserProfile {
   username: string;
   displayName: string;
   avatarColor: string;
+  isGuest?: boolean;
 }
 
 export interface RoomPlayer {
@@ -76,7 +77,7 @@ export const GAME_META: Record<
     name: '达芬奇密码',
     minPlayers: 2,
     maxPlayers: 4,
-    description: '推理对手数字牌序列，率先清空手牌者获胜。',
+    description: '推理并猜出对手隐藏的数字牌，最后存活的玩家获胜。',
   },
 };
 

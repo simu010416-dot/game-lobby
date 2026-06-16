@@ -7,4 +7,7 @@ build
 .DS_Store
 coverage
 .turbo
-drizzle/*.sql
+
+# Playwright e2e artifacts
+e2e/playwright-report
+e2e/test-results

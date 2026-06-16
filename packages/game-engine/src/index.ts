@@ -10,8 +10,12 @@ import {
 import { UNDERCOVER_WORD_PAIRS } from './games/undercover/words.js';
 import {
   createDaVinciGame,
-  playDaVinciTile,
+  guessDaVinciTile,
+  decideDaVinciContinue,
   generateBotDaVinciMove,
+  generateBotDaVinciDecision,
+  computeDaVinciCandidates,
+  redactDaVinciState,
   type DaVinciGameState,
 } from './games/da-vinci-code/logic.js';
 import { pickRandom } from './ai/utils.js';
@@ -44,7 +48,11 @@ export {
   generateBotVote,
   type UndercoverGameState,
   createDaVinciGame,
-  playDaVinciTile,
+  guessDaVinciTile,
+  decideDaVinciContinue,
   generateBotDaVinciMove,
+  generateBotDaVinciDecision,
+  computeDaVinciCandidates,
+  redactDaVinciState,
   type DaVinciGameState,
 };

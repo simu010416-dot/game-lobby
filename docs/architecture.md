@@ -48,7 +48,7 @@ flowchart TB
 
 - 纯函数游戏逻辑，不依赖 IO
 - `谁是卧底`：发词、描述、投票、胜负判定
-- `达芬奇密码`：发牌、出牌、猜测评估
+- `达芬奇密码`：发牌、抽牌、猜测对手暗牌、翻牌出局判定、按视角脱敏
 - 电脑 AI：基于难度的随机/失误策略
 
 ### `@game-lobby/server`
@@ -76,9 +76,10 @@ flowchart TB
 | `room:update-queue` | C→S | 更新游戏队列 |
 | `room:set-roles` | C→S | 设置玩家/旁观 |
 | `game:start` | C→S | 房主开始下一局 |
-| `game:state` | S→C | 游戏状态同步 |
+| `game:state` | S→C | 游戏状态同步（达芬奇按玩家视角脱敏单独下发） |
 | `game:undercover:*` | C→S | 卧底描述/投票 |
-| `game:davinci:play` | C→S | 达芬奇出牌 |
+| `game:davinci:guess` | C→S | 达芬奇猜测对手暗牌 |
+| `game:davinci:decision` | C→S | 达芬奇猜中后继续/停止 |
 
 ## 数据持久化策略
 
