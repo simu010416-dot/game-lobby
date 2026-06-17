@@ -10,6 +10,7 @@ import { wordPacksRouter } from './routes/word-packs.js';
 import { authMiddleware } from './middleware/auth.js';
 import { setupSocketHandlers } from './socket/index.js';
 import { RoomManager } from './services/room-manager.js';
+import { startGuestUserSweeper } from './services/guest-user-service.js';
 import { startWordPackSyncScheduler } from './services/word-pack-service.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
@@ -41,6 +42,7 @@ const io = new Server(httpServer, {
 
 setupSocketHandlers(io, db, roomManager);
 roomManager.startSweeper();
+startGuestUserSweeper(db);
 startWordPackSyncScheduler(db);
 
 httpServer.listen(PORT, () => {
