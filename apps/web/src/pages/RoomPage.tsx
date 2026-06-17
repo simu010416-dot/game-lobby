@@ -309,44 +309,13 @@ export function RoomPage() {
         </div>
       )}
 
-      <div style={{ position: 'relative' }}>
-        {GameComponent && gameState != null ? (
-          <GameComponent
-            state={gameState as import('@game-lobby/game-engine').GameState}
-            myMemberId={myMember?.id ?? null}
-            isSpectator={isSpectator}
-          />
-        ) : null}
-
-        {isIntermission && (
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'flex-end',
-              justifyContent: 'center',
-              padding: '1rem',
-              background: 'linear-gradient(to top, rgba(0,0,0,0.75) 0%, transparent 60%)',
-              pointerEvents: 'none',
-            }}
-          >
-            <div
-              style={{
-                pointerEvents: 'auto',
-                width: '100%',
-                maxWidth: 720,
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                gap: '1rem',
-              }}
-            >
-              {playerListPanel}
-              {settingsPanel}
-            </div>
-          </div>
-        )}
-      </div>
+      {GameComponent && gameState != null ? (
+        <GameComponent
+          state={gameState as import('@game-lobby/game-engine').GameState}
+          myMemberId={myMember?.id ?? null}
+          isSpectator={isSpectator}
+        />
+      ) : null}
     </div>
   );
 }
