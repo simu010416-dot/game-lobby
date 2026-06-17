@@ -8,6 +8,13 @@
       "when": 1781514269027,
       "tag": "0000_faithful_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1781600000000,
+      "tag": "0001_game_type_lobby",
+      "breakpoints": true
     }
   ]
 }

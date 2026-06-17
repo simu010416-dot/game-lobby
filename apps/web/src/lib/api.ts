@@ -1,4 +1,4 @@
-import type { AuthResponse, RoomDetail, RoomSummary } from '@game-lobby/shared';
+import type { AuthResponse, GameType, RoomDetail, RoomSummary } from '@game-lobby/shared';
 
 const API_URL = import.meta.env.VITE_API_URL ?? '';
 
@@ -47,14 +47,15 @@ export function updateProfile(token: string, displayName: string) {
   }, token);
 }
 
-export function fetchRooms(token: string) {
-  return request<RoomSummary[]>('/api/rooms', {}, token);
+export function fetchRooms(token: string, gameType?: GameType) {
+  const query = gameType ? `?gameType=${gameType}` : '';
+  return request<RoomSummary[]>(`/api/rooms${query}`, {}, token);
 }
 
-export function createRoom(token: string, name: string, maxPlayers = 8) {
+export function createRoom(token: string, name: string, gameType: GameType, maxPlayers?: number) {
   return request<RoomDetail>('/api/rooms', {
     method: 'POST',
-    body: JSON.stringify({ name, maxPlayers }),
+    body: JSON.stringify({ name, gameType, maxPlayers }),
   }, token);
 }
 

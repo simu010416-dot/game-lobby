@@ -6,8 +6,6 @@ export type RoomStatus = 'waiting' | 'playing' | 'finished';
 
 export type PlayerRole = 'host' | 'player' | 'spectator';
 
-export type GameQueueMode = 'ordered' | 'random';
-
 export interface UserProfile {
   id: string;
   username: string;
@@ -28,17 +26,12 @@ export interface RoomPlayer {
   isReady: boolean;
 }
 
-export interface GameQueueItem {
-  gameType: GameType;
-  order: number;
-}
-
 export interface RoomSummary {
   id: string;
   name: string;
   hostId: string;
+  gameType: GameType;
   status: RoomStatus;
-  currentGame: GameType | null;
   playerCount: number;
   spectatorCount: number;
   maxPlayers: number;
@@ -47,8 +40,6 @@ export interface RoomSummary {
 }
 
 export interface RoomDetail extends RoomSummary {
-  gameQueue: GameQueueItem[];
-  queueMode: GameQueueMode;
   activePlayerIds: string[];
   spectatorIds: string[];
 }

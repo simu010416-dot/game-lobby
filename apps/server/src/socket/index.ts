@@ -4,14 +4,12 @@ import type { Database } from '@game-lobby/db';
 import { verifyToken } from '../middleware/auth.js';
 import type { RoomCloseReason, RoomManager } from '../services/room-manager.js';
 import { redactDaVinciState, type DaVinciGameState } from '@game-lobby/game-engine';
-import type { AiDifficulty, GameQueueItem, GameQueueMode } from '@game-lobby/shared';
+import type { AiDifficulty, GameType } from '@game-lobby/shared';
+import { ALL_GAME_TYPES } from '@game-lobby/shared';
 
 const joinSchema = z.object({ roomId: z.string().uuid() });
+const lobbySubscribeSchema = z.object({ gameType: z.enum(['undercover', 'da_vinci_code']) });
 const addBotSchema = z.object({ difficulty: z.enum(['easy', 'medium', 'hard', 'expert']) });
-const updateQueueSchema = z.object({
-  queue: z.array(z.object({ gameType: z.enum(['undercover', 'da_vinci_code']), order: z.number() })),
-  mode: z.enum(['ordered', 'random']),
-});
 const setRolesSchema = z.object({
   activePlayerIds: z.array(z.string().uuid()),
   spectatorIds: z.array(z.string().uuid()),
@@ -19,7 +17,6 @@ const setRolesSchema = z.object({
 const davinciGuessSchema = z.object({
   targetPlayerId: z.string(),
   tileIndex: z.number().int().min(0),
-  // 0..11 is a numeric guess; 12 (JOKER_VALUE) means "I think this is a Joker".
   value: z.number().int().min(0).max(12),
 });
 const davinciDecisionSchema = z.object({ continue: z.boolean() });
@@ -36,12 +33,9 @@ const davinciSetupSchema = z.object({
 const startGameSchema = z.object({ useJoker: z.boolean().optional() }).optional();
 
 export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomManager) {
-  // Notify clients (and refresh the lobby) when a room is auto-closed (empty
-  // grace period, idle timeout, or stale/unresponsive game timeout).
   roomManager.setRoomClosedListener(async (roomId, reason) => {
     io.to(roomId).emit('room:closed', { roomId, reason, message: roomCloseMessage(reason) });
-    const lobbyRooms = await roomManager.listRooms();
-    io.emit('lobby:rooms', lobbyRooms);
+    await broadcastLobbyRooms(io, roomManager);
   });
 
   io.use((socket, next) => {
@@ -66,8 +60,13 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       displayName: string;
     };
 
-    socket.on('lobby:subscribe', async () => {
-      const rooms = await roomManager.listRooms();
+    socket.on('lobby:subscribe', async (payload) => {
+      const parsed = lobbySubscribeSchema.safeParse(payload ?? {});
+      if (!parsed.success) {
+        return;
+      }
+      socket.data.lobbyGameType = parsed.data.gameType;
+      const rooms = await roomManager.listRooms(parsed.data.gameType);
       socket.emit('lobby:rooms', rooms);
     });
 
@@ -88,7 +87,6 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       socket.join(parsed.data.roomId);
       io.to(parsed.data.roomId).emit('room:updated', detail);
 
-      // Redirect any other connected sessions of this user out of their old room.
       for (const kicked of kickedSockets) {
         if (kicked.socketId === socket.id) continue;
         io.to(kicked.socketId).emit('room:kicked', { roomId: kicked.roomId });
@@ -119,12 +117,12 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
         }
       }
 
-      const lobbyRooms = await roomManager.listRooms();
-      io.emit('lobby:rooms', lobbyRooms);
+      await broadcastLobbyRooms(io, roomManager, detail.gameType);
       cb?.({ ok: true, room: detail });
     });
 
     socket.on('room:leave', async () => {
+      const roomId = getRoomId(socket);
       const left = await roomManager.leaveRoom(socket.id);
       if (left) {
         socket.leave(left.roomId);
@@ -134,8 +132,8 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
           const detail = await roomManager.getRoomDetail(left.roomId);
           if (detail) io.to(left.roomId).emit('room:updated', detail);
         }
-        const lobbyRooms = await roomManager.listRooms();
-        io.emit('lobby:rooms', lobbyRooms);
+        const detail = roomId ? await roomManager.getRoomDetail(roomId) : null;
+        await broadcastLobbyRooms(io, roomManager, detail?.gameType);
       }
     });
 
@@ -146,6 +144,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
         return;
       }
 
+      const detailBefore = await roomManager.getRoomDetail(roomId);
       const member = await findMember(roomManager, roomId, user.id);
       const ok = await roomManager.closeRoom(roomId, member?.id ?? '');
       if (!ok) {
@@ -154,8 +153,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       }
 
       io.to(roomId).emit('room:closed', { roomId });
-      const lobbyRooms = await roomManager.listRooms();
-      io.emit('lobby:rooms', lobbyRooms);
+      await broadcastLobbyRooms(io, roomManager, detailBefore?.gameType);
       cb?.({ ok: true });
     });
 
@@ -173,27 +171,8 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
         cb?.({ ok: false });
         return;
       }
-      io.to(roomId).emit('room:updated', detail);
-      cb?.({ ok: true, room: detail });
-    });
-
-    socket.on('room:update-queue', async (payload, cb) => {
-      const parsed = updateQueueSchema.safeParse(payload);
-      const roomId = getRoomId(socket);
-      if (!parsed.success || !roomId) {
-        cb?.({ ok: false });
-        return;
-      }
-
-      const member = await findMember(roomManager, roomId, user.id);
-      const detail = await roomManager.updateQueue(
-        roomId,
-        parsed.data.queue as GameQueueItem[],
-        parsed.data.mode as GameQueueMode,
-        member?.id ?? '',
-      );
-      if (!detail) {
-        cb?.({ ok: false });
+      if ('error' in detail) {
+        cb?.({ ok: false, message: detail.error });
         return;
       }
       io.to(roomId).emit('room:updated', detail);
@@ -217,6 +196,10 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       );
       if (!detail) {
         cb?.({ ok: false });
+        return;
+      }
+      if ('error' in detail) {
+        cb?.({ ok: false, message: detail.error });
         return;
       }
       io.to(roomId).emit('room:updated', detail);
@@ -250,8 +233,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       await emitGameState(io, roomManager, roomId);
 
       await processBots(io, roomManager, roomId);
-      const lobbyRooms = await roomManager.listRooms();
-      io.emit('lobby:rooms', lobbyRooms);
+      await broadcastLobbyRooms(io, roomManager, result.detail.gameType);
       cb?.({ ok: true });
     });
 
@@ -265,6 +247,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       if (!game) return;
 
       io.to(roomId).emit('game:state', { gameType: game.gameType, state: game.state });
+      await emitRoomIfGameEnded(io, roomManager, roomId, game.state);
       await processBots(io, roomManager, roomId);
       cb?.({ ok: true });
     });
@@ -279,6 +262,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       if (!game) return;
 
       io.to(roomId).emit('game:state', { gameType: game.gameType, state: game.state });
+      await emitRoomIfGameEnded(io, roomManager, roomId, game.state);
       await processBots(io, roomManager, roomId);
       cb?.({ ok: true });
     });
@@ -303,6 +287,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       if (!game) return;
 
       await emitGameState(io, roomManager, roomId);
+      await emitRoomIfGameEnded(io, roomManager, roomId, game.state);
       await processBots(io, roomManager, roomId);
       cb?.({ ok: true });
     });
@@ -321,6 +306,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       if (!game) return;
 
       await emitGameState(io, roomManager, roomId);
+      await emitRoomIfGameEnded(io, roomManager, roomId, game.state);
       await processBots(io, roomManager, roomId);
       cb?.({ ok: true });
     });
@@ -339,6 +325,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       if (!game) return;
 
       await emitGameState(io, roomManager, roomId);
+      await emitRoomIfGameEnded(io, roomManager, roomId, game.state);
       await processBots(io, roomManager, roomId);
       cb?.({ ok: true });
     });
@@ -362,6 +349,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
     });
 
     socket.on('disconnect', async () => {
+      const roomId = getRoomId(socket);
       const left = await roomManager.leaveRoom(socket.id);
       if (left) {
         if (left.deleted) {
@@ -370,11 +358,38 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
           const detail = await roomManager.getRoomDetail(left.roomId);
           if (detail) io.to(left.roomId).emit('room:updated', detail);
         }
-        const lobbyRooms = await roomManager.listRooms();
-        io.emit('lobby:rooms', lobbyRooms);
+        const detail = roomId ? await roomManager.getRoomDetail(roomId) : null;
+        await broadcastLobbyRooms(io, roomManager, detail?.gameType);
       }
     });
   });
+}
+
+async function broadcastLobbyRooms(io: Server, roomManager: RoomManager, gameType?: GameType) {
+  const targets = gameType ? [gameType] : ALL_GAME_TYPES;
+  const sockets = await io.fetchSockets();
+  for (const gt of targets) {
+    const rooms = await roomManager.listRooms(gt);
+    for (const s of sockets) {
+      if (s.data.lobbyGameType === gt) {
+        s.emit('lobby:rooms', rooms);
+      }
+    }
+  }
+}
+
+async function emitRoomIfGameEnded(
+  io: Server,
+  roomManager: RoomManager,
+  roomId: string,
+  state: unknown,
+) {
+  if ((state as { phase?: string }).phase !== 'ended') return;
+  const detail = await roomManager.getRoomDetail(roomId);
+  if (detail) {
+    io.to(roomId).emit('room:updated', detail);
+    await broadcastLobbyRooms(io, roomManager, detail.gameType);
+  }
 }
 
 function roomCloseMessage(reason: RoomCloseReason): string {
@@ -398,9 +413,6 @@ async function findMember(roomManager: RoomManager, roomId: string, userId: stri
   return detail?.players.find((p) => p.userId === userId);
 }
 
-// Broadcasts the current game state to everyone in the room. For games with
-// hidden information (Da Vinci Code) each socket receives a personalized,
-// redacted view so opponents' secret tiles never leave the server.
 async function emitGameState(io: Server, roomManager: RoomManager, roomId: string) {
   const game = roomManager.getGame(roomId);
   if (!game) return;
@@ -425,15 +437,13 @@ async function emitGameState(io: Server, roomManager: RoomManager, roomId: strin
 async function processBots(io: Server, roomManager: RoomManager, roomId: string) {
   let safety = 0;
   while (safety < 50) {
-    // Snapshot the state BEFORE running bot turns. runBotTurns mutates the same
-    // in-memory game object, so we must serialize the previous state up front to
-    // detect whether any progress was actually made this iteration.
     const beforeJson = JSON.stringify(roomManager.getGame(roomId)?.state);
     const after = await roomManager.runBotTurns(roomId);
     if (!after) break;
     const afterJson = JSON.stringify(after.state);
     if (beforeJson === afterJson) break;
     await emitGameState(io, roomManager, roomId);
+    await emitRoomIfGameEnded(io, roomManager, roomId, after.state);
     safety++;
   }
 }

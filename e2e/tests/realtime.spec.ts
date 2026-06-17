@@ -12,14 +12,13 @@ test.describe('实时同步', () => {
       const hostName = await loginAsGuest(hostPage);
       const guestName = await loginAsGuest(guestPage);
 
-      const roomId = await createRoom(hostPage, unique('房间'));
+      const roomId = await createRoom(hostPage, unique('房间'), 'da_vinci_code');
 
       const hostPlayerList = playerListSection(hostPage);
       await expect(hostPlayerList.getByText(hostName)).toBeVisible();
       await expect(hostPlayerList.getByText(guestName)).toHaveCount(0);
 
-      // Guest navigates directly to the room; joining happens over Socket.io.
-      await guestPage.goto(`/room/${roomId}`);
+      await guestPage.goto(`/games/da_vinci_code/room/${roomId}`);
       const guestPlayerList = playerListSection(guestPage);
       await expect(guestPlayerList.getByText(hostName)).toBeVisible();
       await expect(guestPlayerList.getByText(guestName)).toBeVisible();

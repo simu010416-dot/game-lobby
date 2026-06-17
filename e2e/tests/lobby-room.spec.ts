@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { addBot, createRoom, loginAsGuest, playerListSection, unique } from './helpers';
+import { addBot, createRoom, enterGameLobby, loginAsGuest, playerListSection, unique } from './helpers';
 
 test.describe('大厅与房间', () => {
   test('创建房间后成为房主', async ({ page }) => {
@@ -13,13 +13,12 @@ test.describe('大厅与房间', () => {
     await expect(playerList.getByText('（房主）')).toBeVisible();
   });
 
-  test('房间出现在大厅列表中', async ({ page }) => {
+  test('房间出现在游戏大厅列表中', async ({ page }) => {
     await loginAsGuest(page);
     const roomName = unique('房间');
     await createRoom(page, roomName);
 
-    await page.goto('/');
-    await expect(page.getByRole('heading', { name: '游戏大厅' })).toBeVisible();
+    await enterGameLobby(page, 'da_vinci_code');
     await expect(page.getByRole('heading', { name: roomName })).toBeVisible();
   });
 

@@ -1,21 +1,8 @@
 import { eq, asc, and } from 'drizzle-orm';
 import { v4 as uuid } from 'uuid';
-import {
-  rooms,
-  roomMembers,
-  roomGameQueue,
-  type Database,
-} from '@game-lobby/db';
-import type {
-  AiDifficulty,
-  GameQueueItem,
-  GameQueueMode,
-  GameType,
-  RoomDetail,
-  RoomPlayer,
-  RoomSummary,
-} from '@game-lobby/shared';
-import { ALL_GAME_TYPES, GAME_META } from '@game-lobby/shared';
+import { rooms, roomMembers, type Database } from '@game-lobby/db';
+import type { AiDifficulty, GameType, RoomDetail, RoomPlayer, RoomSummary } from '@game-lobby/shared';
+import { GAME_META } from '@game-lobby/shared';
 import {
   createGame,
   submitUndercoverDescription,
@@ -47,23 +34,14 @@ export type RoomCloseReason = 'empty' | 'idle' | 'stale';
 export class RoomManager {
   private games = new Map<string, InMemoryGame>();
   private socketToMember = new Map<string, { roomId: string; memberId: string }>();
-  // Per-key promise chain used to serialize membership mutations and avoid
-  // race conditions (e.g. duplicate members when a client joins twice rapidly).
   private locks = new Map<string, Promise<unknown>>();
-  // Empty rooms are closed after a grace period so brief disconnects / page
-  // refreshes (incl. React StrictMode double-mount) don't destroy the room.
   private pendingClose = new Map<string, NodeJS.Timeout>();
-  // Last time anything meaningful happened in a room (join/leave, settings
-  // change, or a game move). Drives the idle-room and stale-game timeouts.
   private roomActivity = new Map<string, number>();
   private sweeper?: NodeJS.Timeout;
   private onRoomClosed?: (roomId: string, reason: RoomCloseReason) => void;
   private static readonly EMPTY_ROOM_GRACE_MS = 30_000;
-  // A room that never starts a game is closed after this long without activity.
   private static readonly IDLE_ROOM_TIMEOUT_MS =
     Number(process.env.IDLE_ROOM_TIMEOUT_MS) || 15 * 60_000;
-  // A running game that makes no progress (e.g. waiting on a player who left)
-  // is closed after this long without activity.
   private static readonly STALE_GAME_TIMEOUT_MS =
     Number(process.env.STALE_GAME_TIMEOUT_MS) || 5 * 60_000;
   private static readonly SWEEP_INTERVAL_MS = 30_000;
@@ -74,7 +52,6 @@ export class RoomManager {
     this.onRoomClosed = cb;
   }
 
-  // Starts the periodic timeout sweeper. Returns a function that stops it.
   startSweeper(): () => void {
     if (!this.sweeper) {
       this.sweeper = setInterval(() => {
@@ -100,9 +77,6 @@ export class RoomManager {
     return (game.state as { phase?: string }).phase === 'ended';
   }
 
-  // Returns whether a room has exceeded its timeout, and which kind. A room
-  // with an active (not-yet-ended) game uses the stale-game timeout; any other
-  // room (waiting, or holding a finished game) uses the idle-room timeout.
   private getTimeoutStatus(room: typeof rooms.$inferSelect): {
     timedOut: boolean;
     reason: Exclude<RoomCloseReason, 'empty'>;
@@ -131,7 +105,6 @@ export class RoomManager {
       const [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId));
       if (!room) return;
 
-      // Re-check under the lock so we don't close a room that just saw activity.
       const { timedOut, reason } = this.getTimeoutStatus(room);
       if (!timedOut) return;
 
@@ -157,8 +130,14 @@ export class RoomManager {
     return run;
   }
 
-  async listRooms(): Promise<RoomSummary[]> {
-    const allRooms = await this.db.select().from(rooms).orderBy(asc(rooms.createdAt));
+  async listRooms(gameType?: GameType): Promise<RoomSummary[]> {
+    const allRooms = gameType
+      ? await this.db
+          .select()
+          .from(rooms)
+          .where(eq(rooms.gameType, gameType))
+          .orderBy(asc(rooms.createdAt))
+      : await this.db.select().from(rooms).orderBy(asc(rooms.createdAt));
     const summaries: RoomSummary[] = [];
 
     for (const room of allRooms) {
@@ -170,18 +149,22 @@ export class RoomManager {
 
   async createRoom(input: {
     name: string;
+    gameType: GameType;
     hostUserId: string;
     hostUsername: string;
     hostDisplayName: string;
     maxPlayers: number;
   }): Promise<RoomDetail> {
+    const meta = GAME_META[input.gameType];
+    const maxPlayers = Math.min(Math.max(input.maxPlayers, meta.minPlayers), meta.maxPlayers);
+
     const [room] = await this.db
       .insert(rooms)
       .values({
         name: input.name,
         hostUserId: input.hostUserId,
-        maxPlayers: input.maxPlayers,
-        queueMode: 'ordered',
+        gameType: input.gameType,
+        maxPlayers,
       })
       .returning();
 
@@ -198,16 +181,9 @@ export class RoomManager {
       })
       .returning();
 
-    const queueItems = ALL_GAME_TYPES.map((gameType, i) => ({
-      roomId: room!.id,
-      gameType,
-      sortOrder: i,
-    }));
-    await this.db.insert(roomGameQueue).values(queueItems);
-
     this.touchRoom(room!.id);
     const members = [this.mapMember(hostMember!)];
-    return this.toDetail(room!, members, queueItems.map((q, i) => ({ gameType: q.gameType as GameType, order: i })));
+    return this.toDetail(room!, members);
   }
 
   async getRoomDetail(roomId: string): Promise<RoomDetail | null> {
@@ -215,17 +191,7 @@ export class RoomManager {
     if (!room) return null;
 
     const members = await this.getMembers(roomId);
-    const queue = await this.db
-      .select()
-      .from(roomGameQueue)
-      .where(eq(roomGameQueue.roomId, roomId))
-      .orderBy(asc(roomGameQueue.sortOrder));
-
-    return this.toDetail(
-      room,
-      members,
-      queue.map((q) => ({ gameType: q.gameType as GameType, order: q.sortOrder })),
-    );
+    return this.toDetail(room, members);
   }
 
   async joinRoom(
@@ -241,15 +207,11 @@ export class RoomManager {
       const [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId));
       if (!room) return null;
 
-      // Someone is (re)joining, so cancel any pending auto-close for this room.
       this.cancelScheduledClose(roomId);
       this.touchRoom(roomId);
 
-      // A player may only be in one room at a time: remove them from any others.
       const { leftRooms, kickedSockets } = await this.removeUserFromOtherRooms(user.id, roomId);
 
-      // Look up existing membership directly so a duplicate is never created,
-      // and clean up any pre-existing duplicates for safety.
       const existing = await this.db
         .select()
         .from(roomMembers)
@@ -266,6 +228,7 @@ export class RoomManager {
           .set({ isOnline: true, displayName: user.displayName })
           .where(eq(roomMembers.id, memberId));
       } else {
+        const joinRole = room.status === 'playing' ? 'spectator' : 'player';
         const [created] = await this.db
           .insert(roomMembers)
           .values({
@@ -273,7 +236,7 @@ export class RoomManager {
             userId: user.id,
             username: user.username,
             displayName: user.displayName,
-            role: 'player',
+            role: joinRole,
             isOnline: true,
           })
           .returning();
@@ -316,10 +279,6 @@ export class RoomManager {
     return true;
   }
 
-  // Removes the user from every room except `exceptRoomId`, cleaning up empty
-  // rooms and reassigning the host when needed. Returns the affected rooms and
-  // the still-connected sockets that were viewing those rooms (so they can be
-  // redirected out).
   private async removeUserFromOtherRooms(
     userId: string,
     exceptRoomId: string,
@@ -357,9 +316,6 @@ export class RoomManager {
     return { leftRooms, kickedSockets };
   }
 
-  // Schedules an empty room for deletion (after a grace period) and otherwise
-  // ensures a host still exists. Returns true only on immediate deletion (none
-  // here, since closing is deferred); callers treat the room as still present.
   private async cleanupRoom(roomId: string): Promise<boolean> {
     const members = await this.getMembers(roomId);
     const onlineHumans = members.filter((m) => !m.isBot && m.isOnline);
@@ -369,11 +325,8 @@ export class RoomManager {
       return false;
     }
 
-    // A human is present, so cancel any pending auto-close.
     this.cancelScheduledClose(roomId);
 
-    // Reassign the host only when the host membership is actually gone (e.g.
-    // kicked or moved to another room) — not for a host that is merely offline.
     const hasHost = members.some((m) => m.role === 'host');
     if (!hasHost) {
       const newHost = onlineHumans[0]!;
@@ -414,7 +367,7 @@ export class RoomManager {
     await this.runExclusive(`room:${roomId}`, async () => {
       const members = await this.getMembers(roomId);
       const onlineHumans = members.filter((m) => !m.isBot && m.isOnline);
-      if (onlineHumans.length > 0) return; // someone came back during the grace period
+      if (onlineHumans.length > 0) return;
 
       await this.db.delete(rooms).where(eq(rooms.id, roomId));
       this.games.delete(roomId);
@@ -430,14 +383,28 @@ export class RoomManager {
     }
   }
 
+  private async assertWaitingRoom(
+    roomId: string,
+  ): Promise<{ ok: true; detail: RoomDetail } | { ok: false; message: string }> {
+    const detail = await this.getRoomDetail(roomId);
+    if (!detail) return { ok: false, message: '房间不存在' };
+    if (detail.status === 'playing') {
+      return { ok: false, message: '游戏进行中，请在局间调整人员' };
+    }
+    return { ok: true, detail };
+  }
+
   async addBot(
     roomId: string,
     difficulty: AiDifficulty,
     requesterId: string,
-  ): Promise<RoomDetail | null> {
+  ): Promise<RoomDetail | { error: string } | null> {
     const detail = await this.getRoomDetail(roomId);
     const hostMember = detail?.players.find((p) => p.role === 'host');
     if (!detail || hostMember?.id !== requesterId) return null;
+
+    const waiting = await this.assertWaitingRoom(roomId);
+    if (!waiting.ok) return { error: waiting.message };
 
     const botName = `电脑-${difficulty}-${Math.floor(Math.random() * 1000)}`;
     await this.db.insert(roomMembers).values({
@@ -461,33 +428,10 @@ export class RoomManager {
     const hostMember = detail?.players.find((p) => p.role === 'host');
     if (!detail || hostMember?.id !== requesterId) return null;
 
+    const waiting = await this.assertWaitingRoom(roomId);
+    if (!waiting.ok) return null;
+
     await this.db.delete(roomMembers).where(eq(roomMembers.id, memberId));
-    return this.getRoomDetail(roomId);
-  }
-
-  async updateQueue(
-    roomId: string,
-    queue: GameQueueItem[],
-    mode: GameQueueMode,
-    requesterId: string,
-  ): Promise<RoomDetail | null> {
-    const detail = await this.getRoomDetail(roomId);
-    const hostMember = detail?.players.find((p) => p.role === 'host');
-    if (!detail || hostMember?.id !== requesterId) return null;
-
-    await this.db.delete(roomGameQueue).where(eq(roomGameQueue.roomId, roomId));
-    if (queue.length > 0) {
-      await this.db.insert(roomGameQueue).values(
-        queue.map((item, i) => ({
-          roomId,
-          gameType: item.gameType,
-          sortOrder: item.order ?? i,
-        })),
-      );
-    }
-
-    await this.db.update(rooms).set({ queueMode: mode }).where(eq(rooms.id, roomId));
-    this.touchRoom(roomId);
     return this.getRoomDetail(roomId);
   }
 
@@ -496,10 +440,13 @@ export class RoomManager {
     activePlayerIds: string[],
     spectatorIds: string[],
     requesterId: string,
-  ): Promise<RoomDetail | null> {
+  ): Promise<RoomDetail | { error: string } | null> {
     const detail = await this.getRoomDetail(roomId);
     const hostMember = detail?.players.find((p) => p.role === 'host');
     if (!detail || hostMember?.id !== requesterId) return null;
+
+    const waiting = await this.assertWaitingRoom(roomId);
+    if (!waiting.ok) return { error: waiting.message };
 
     const members = await this.getMembers(roomId);
     for (const m of members) {
@@ -532,13 +479,12 @@ export class RoomManager {
       return { ok: false, message: '仅房主可开始游戏' };
     }
 
-    const nextGame = this.pickNextGame(detail);
-    if (!nextGame) {
-      return { ok: false, message: '游戏队列为空，请先在右侧添加并保存游戏。' };
+    if (detail.status === 'playing') {
+      return { ok: false, message: '游戏已在进行中' };
     }
 
-    // Bots cannot meaningfully play 谁是卧底 (they rely on natural-language
-    // descriptions), so automatically move them to spectators for this game.
+    const nextGame = detail.gameType;
+
     if (nextGame === 'undercover') {
       const activeBots = detail.players.filter((p) => p.isBot && p.role !== 'spectator');
       for (const bot of activeBots) {
@@ -564,7 +510,7 @@ export class RoomManager {
           : '';
       return {
         ok: false,
-        message: `下一局是「${meta.name}」，需要至少 ${meta.minPlayers} 名玩家，当前仅 ${activePlayers.length} 名。${hint}`,
+        message: `「${meta.name}」需要至少 ${meta.minPlayers} 名玩家，当前仅 ${activePlayers.length} 名。${hint}`,
       };
     }
 
@@ -584,10 +530,7 @@ export class RoomManager {
       activePlayerIds: participants.map((p) => p.id),
     });
 
-    await this.db
-      .update(rooms)
-      .set({ status: 'playing', currentGame: nextGame })
-      .where(eq(rooms.id, roomId));
+    await this.db.update(rooms).set({ status: 'playing' }).where(eq(rooms.id, roomId));
 
     this.touchRoom(roomId);
     const updated = await this.getRoomDetail(roomId);
@@ -598,6 +541,11 @@ export class RoomManager {
 
   getGame(roomId: string): InMemoryGame | undefined {
     return this.games.get(roomId);
+  }
+
+  async markGameEnded(roomId: string): Promise<RoomDetail | null> {
+    await this.db.update(rooms).set({ status: 'waiting' }).where(eq(rooms.id, roomId));
+    return this.getRoomDetail(roomId);
   }
 
   async processUndercoverDescribe(roomId: string, playerId: string, description: string) {
@@ -614,7 +562,7 @@ export class RoomManager {
     game.state = submitUndercoverVote(game.state as UndercoverGameState, voterId, targetId);
     this.touchRoom(roomId);
     if ((game.state as UndercoverGameState).phase === 'ended') {
-      await this.db.update(rooms).set({ status: 'waiting' }).where(eq(rooms.id, roomId));
+      await this.markGameEnded(roomId);
     }
     return game;
   }
@@ -637,7 +585,7 @@ export class RoomManager {
     );
     this.touchRoom(roomId);
     if ((game.state as DaVinciGameState).phase === 'ended') {
-      await this.db.update(rooms).set({ status: 'waiting' }).where(eq(rooms.id, roomId));
+      await this.markGameEnded(roomId);
     }
     return game;
   }
@@ -652,7 +600,7 @@ export class RoomManager {
     );
     this.touchRoom(roomId);
     if ((game.state as DaVinciGameState).phase === 'ended') {
-      await this.db.update(rooms).set({ status: 'waiting' }).where(eq(rooms.id, roomId));
+      await this.markGameEnded(roomId);
     }
     return game;
   }
@@ -663,7 +611,7 @@ export class RoomManager {
     game.state = placeDaVinciJoker(game.state as DaVinciGameState, playerId, index);
     this.touchRoom(roomId);
     if ((game.state as DaVinciGameState).phase === 'ended') {
-      await this.db.update(rooms).set({ status: 'waiting' }).where(eq(rooms.id, roomId));
+      await this.markGameEnded(roomId);
     }
     return game;
   }
@@ -687,9 +635,6 @@ export class RoomManager {
     const detail = await this.getRoomDetail(roomId);
     if (!detail) return game;
 
-    // A bot move counts as activity; if nothing changes (e.g. it's a human's
-    // turn), we leave the activity timestamp alone so the stale-game timeout
-    // can eventually fire on an absent player.
     const before = JSON.stringify(game.state);
 
     if (game.gameType === 'undercover') {
@@ -722,8 +667,6 @@ export class RoomManager {
       const current = state.players[state.currentPlayerIndex];
       const member = detail.players.find((p) => p.id === current?.id);
       if (current?.isBot && member?.botDifficulty && state.phase === 'playing') {
-        // One atomic step per call (guess OR decide); processBots loops so each
-        // bot action is broadcast separately and the turn animates naturally.
         if (state.stage === 'guessing') {
           const move = generateBotDaVinciMove(state, current.id, member.botDifficulty);
           game.state = guessDaVinciTile(
@@ -741,22 +684,13 @@ export class RoomManager {
           game.state = decideDaVinciContinue(state, current.id, keepGoing);
         }
         if ((game.state as DaVinciGameState).phase === 'ended') {
-          await this.db.update(rooms).set({ status: 'waiting' }).where(eq(rooms.id, roomId));
+          await this.markGameEnded(roomId);
         }
       }
     }
 
     if (JSON.stringify(game.state) !== before) this.touchRoom(roomId);
     return game;
-  }
-
-  private pickNextGame(detail: RoomDetail): GameType | null {
-    if (detail.gameQueue.length === 0) return null;
-    if (detail.queueMode === 'random') {
-      const item = detail.gameQueue[Math.floor(Math.random() * detail.gameQueue.length)]!;
-      return item.gameType;
-    }
-    return detail.gameQueue[0]!.gameType;
   }
 
   private async getMembers(roomId: string) {
@@ -787,8 +721,8 @@ export class RoomManager {
       id: room.id,
       name: room.name,
       hostId: host?.id ?? room.hostUserId,
+      gameType: room.gameType as GameType,
       status: room.status as RoomSummary['status'],
-      currentGame: room.currentGame as GameType | null,
       playerCount: members.filter((m) => m.role !== 'spectator').length,
       spectatorCount: members.filter((m) => m.role === 'spectator').length,
       maxPlayers: room.maxPlayers,
@@ -797,16 +731,10 @@ export class RoomManager {
     };
   }
 
-  private toDetail(
-    room: typeof rooms.$inferSelect,
-    members: RoomPlayer[],
-    queue: GameQueueItem[],
-  ): RoomDetail {
+  private toDetail(room: typeof rooms.$inferSelect, members: RoomPlayer[]): RoomDetail {
     const summary = this.toSummary(room, members);
     return {
       ...summary,
-      gameQueue: queue,
-      queueMode: room.queueMode as GameQueueMode,
       activePlayerIds: members.filter((m) => m.role !== 'spectator').map((m) => m.id),
       spectatorIds: members.filter((m) => m.role === 'spectator').map((m) => m.id),
     };

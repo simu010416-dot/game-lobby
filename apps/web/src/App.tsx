@@ -1,7 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { useAuth } from './context/AuthContext';
 import { LoginPage } from './pages/LoginPage';
-import { LobbyPage } from './pages/LobbyPage';
+import { HomePage } from './pages/HomePage';
+import { GameLobbyPage } from './pages/GameLobbyPage';
 import { RoomPage } from './pages/RoomPage';
 import { Layout } from './components/Layout';
 
@@ -23,8 +24,9 @@ export function App() {
           </PrivateRoute>
         }
       >
-        <Route index element={<LobbyPage />} />
-        <Route path="room/:roomId" element={<RoomPage />} />
+        <Route index element={<HomePage />} />
+        <Route path="games/:gameType" element={<GameLobbyPage />} />
+        <Route path="games/:gameType/room/:roomId" element={<RoomPage />} />
       </Route>
     </Routes>
   );

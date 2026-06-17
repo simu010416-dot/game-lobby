@@ -15,7 +15,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "generate": "drizzle-kit generate",
-    "migrate": "drizzle-kit migrate",
+    "migrate": "node scripts/migrate.mjs",
     "push": "drizzle-kit push"
   },
   "dependencies": {

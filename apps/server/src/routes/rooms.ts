@@ -3,17 +3,26 @@ import { z } from 'zod';
 import type { Database } from '@game-lobby/db';
 import type { AuthRequest } from '../middleware/auth.js';
 import type { RoomManager } from '../services/room-manager.js';
+import { GAME_META } from '@game-lobby/shared';
+
+const gameTypeSchema = z.enum(['undercover', 'da_vinci_code']);
 
 const createRoomSchema = z.object({
   name: z.string().min(1).max(64),
+  gameType: gameTypeSchema,
   maxPlayers: z.number().int().min(2).max(12).optional(),
 });
 
 export function roomsRouter(db: Database, roomManager: RoomManager): Router {
   const router = Router();
 
-  router.get('/', async (_req, res) => {
-    const rooms = await roomManager.listRooms();
+  router.get('/', async (req, res) => {
+    const parsed = z.object({ gameType: gameTypeSchema.optional() }).safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ message: '参数无效' });
+      return;
+    }
+    const rooms = await roomManager.listRooms(parsed.data.gameType);
     res.json(rooms);
   });
 
@@ -24,12 +33,16 @@ export function roomsRouter(db: Database, roomManager: RoomManager): Router {
       return;
     }
 
+    const meta = GAME_META[parsed.data.gameType];
+    const maxPlayers = parsed.data.maxPlayers ?? meta.maxPlayers;
+
     const room = await roomManager.createRoom({
       name: parsed.data.name,
+      gameType: parsed.data.gameType,
       hostUserId: req.user.id,
       hostUsername: req.user.username,
       hostDisplayName: req.user.displayName,
-      maxPlayers: parsed.data.maxPlayers ?? 8,
+      maxPlayers,
     });
 
     res.status(201).json(room);

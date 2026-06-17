@@ -1,44 +1,56 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
-import type { RoomSummary } from '@game-lobby/shared';
-import { GAME_META } from '@game-lobby/shared';
+import { Link, Navigate, useParams } from 'react-router-dom';
+import type { GameType, RoomSummary } from '@game-lobby/shared';
+import { ALL_GAME_TYPES, GAME_META } from '@game-lobby/shared';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
 import { getSocket, subscribeLobby } from '../lib/socket';
 
-export function LobbyPage() {
+export function GameLobbyPage() {
+  const { gameType: gameTypeParam } = useParams<{ gameType: string }>();
   const { token } = useAuth();
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [roomName, setRoomName] = useState('');
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
 
+  const isValidGame = gameTypeParam != null && ALL_GAME_TYPES.includes(gameTypeParam as GameType);
+  const gameType = (isValidGame ? gameTypeParam : 'undercover') as GameType;
+  const meta = GAME_META[gameType];
+
   useEffect(() => {
-    if (!token) return;
+    if (!token || !isValidGame) return;
     getSocket(token);
-    const unsub = subscribeLobby(setRooms);
-    api.fetchRooms(token).then(setRooms).finally(() => setLoading(false));
+    const unsub = subscribeLobby(gameType, setRooms);
+    api.fetchRooms(token, gameType).then(setRooms).finally(() => setLoading(false));
     return unsub;
-  }, [token]);
+  }, [token, gameType, isValidGame]);
 
   async function handleCreate() {
-    if (!token || !roomName.trim()) return;
+    if (!token || !roomName.trim() || !isValidGame) return;
     setCreating(true);
     try {
-      const room = await api.createRoom(token, roomName.trim());
-      window.location.href = `/room/${room.id}`;
+      const room = await api.createRoom(token, roomName.trim(), gameType);
+      window.location.href = `/games/${gameType}/room/${room.id}`;
     } finally {
       setCreating(false);
     }
+  }
+
+  if (!isValidGame) {
+    return <Navigate to="/" replace />;
   }
 
   return (
     <div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
-          <h1 style={{ margin: 0 }}>游戏大厅</h1>
+          <Link to="/" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+            ← 返回主页
+          </Link>
+          <h1 style={{ margin: '0.25rem 0 0' }}>{meta.name} 大厅</h1>
           <p style={{ margin: '0.25rem 0 0', color: 'var(--text-muted)' }}>
-            查看正在进行的房间，或创建新房间邀请好友
+            {meta.description}
           </p>
         </div>
         <div style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem', flex: '1 1 280px' }}>
@@ -63,7 +75,11 @@ export function LobbyPage() {
       ) : (
         <div className="grid grid-rooms">
           {rooms.map((room) => (
-            <Link key={room.id} to={`/room/${room.id}`} style={{ color: 'inherit' }}>
+            <Link
+              key={room.id}
+              to={`/games/${gameType}/room/${room.id}`}
+              style={{ color: 'inherit' }}
+            >
               <article className="card" style={{ height: '100%' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
                   <h2 style={{ margin: 0, fontSize: '1.1rem' }}>{room.name}</h2>
@@ -71,12 +87,7 @@ export function LobbyPage() {
                     {room.status === 'playing' ? '游戏中' : '等待中'}
                   </span>
                 </div>
-                <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', margin: '0.5rem 0' }}>
-                  {room.currentGame
-                    ? `正在玩：${GAME_META[room.currentGame].name}`
-                    : '尚未开始游戏'}
-                </p>
-                <p style={{ fontSize: '0.85rem', margin: '0 0 0.75rem' }}>
+                <p style={{ fontSize: '0.85rem', margin: '0.5rem 0 0.75rem' }}>
                   玩家 {room.playerCount} · 旁观 {room.spectatorCount}
                 </p>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem' }}>

@@ -1,5 +1,5 @@
 import { io, type Socket } from 'socket.io-client';
-import type { RoomDetail, RoomSummary } from '@game-lobby/shared';
+import type { GameType, RoomDetail, RoomSummary } from '@game-lobby/shared';
 
 const WS_URL = import.meta.env.VITE_WS_URL ?? 'http://localhost:3001';
 
@@ -24,10 +24,10 @@ export function disconnectSocket() {
   socket = null;
 }
 
-export function subscribeLobby(onRooms: (rooms: RoomSummary[]) => void) {
+export function subscribeLobby(gameType: GameType, onRooms: (rooms: RoomSummary[]) => void) {
   const s = socket;
   if (!s) return () => {};
-  s.emit('lobby:subscribe');
+  s.emit('lobby:subscribe', { gameType });
   s.on('lobby:rooms', onRooms);
   return () => s.off('lobby:rooms', onRooms);
 }
@@ -69,12 +69,6 @@ export function closeRoom() {
 export function emitAddBot(difficulty: string) {
   return new Promise<{ ok: boolean }>((resolve) => {
     socket?.emit('room:add-bot', { difficulty }, resolve);
-  });
-}
-
-export function emitUpdateQueue(queue: { gameType: string; order: number }[], mode: string) {
-  return new Promise<{ ok: boolean }>((resolve) => {
-    socket?.emit('room:update-queue', { queue, mode }, resolve);
   });
 }
 

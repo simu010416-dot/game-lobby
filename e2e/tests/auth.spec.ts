@@ -6,7 +6,7 @@ test.describe('认证流程', () => {
     const name = await loginAsGuest(page);
 
     await expect(page).toHaveURL(/\/$|\/$/);
-    await expect(page.getByRole('heading', { name: '游戏大厅' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '选择游戏' })).toBeVisible();
     // The header shows the current display name.
     await expect(page.getByText(name)).toBeVisible();
   });
@@ -15,7 +15,7 @@ test.describe('认证流程', () => {
     const username = unique('user');
     await registerUser(page, username, 'password123');
 
-    await expect(page.getByRole('heading', { name: '游戏大厅' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: '选择游戏' })).toBeVisible();
     await expect(page.getByText(username)).toBeVisible();
   });
 

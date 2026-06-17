@@ -31,6 +31,18 @@ flowchart TB
   RM --> Mem
 ```
 
+## 导航与大厅结构
+
+```mermaid
+flowchart LR
+  Home["/ 主页：选择游戏"] --> GameLobby["/games/:gameType 游戏大厅"]
+  GameLobby --> Room["/games/:gameType/room/:id 固定游戏房间"]
+```
+
+- 主页展示所有游戏卡片及各游戏在线房间数
+- 游戏大厅仅显示该 `gameType` 的房间，在此创建房间
+- 房间绑定单一游戏，局间可调整人员与设置，房主可「再来一局」
+
 ## Monorepo 包职责
 
 ### `@game-lobby/shared`
@@ -41,7 +53,7 @@ flowchart TB
 
 ### `@game-lobby/db`
 
-- Drizzle ORM Schema：`users`、`rooms`、`room_members`、`room_game_queue`、`game_sessions`
+- Drizzle ORM Schema：`users`、`rooms`（含 `game_type`）、`room_members`、`game_sessions`
 - `createDb()` 工厂函数，供服务端注入
 
 ### `@game-lobby/game-engine`
@@ -53,29 +65,29 @@ flowchart TB
 
 ### `@game-lobby/server`
 
-- **REST**：注册、登录、房间列表/创建/详情
-- **WebSocket**：大厅订阅、房间加入、游戏操作、实时广播
-- **RoomManager**：房间生命周期、队列、角色分配、游戏会话
+- **REST**：注册、登录、按游戏过滤的房间列表/创建/详情
+- **WebSocket**：游戏大厅订阅、房间加入、游戏操作、实时广播
+- **RoomManager**：房间生命周期、角色分配、游戏会话（无多游戏队列）
 
 ### `@game-lobby/web`
 
 - 登录/注册页
-- 游戏大厅（房间卡片列表）
-- 房间页（玩家管理、队列、游戏 UI）
+- 主页（游戏选择）
+- 游戏大厅（某游戏的房间列表）
+- 房间页（玩家管理、游戏设置、游戏 UI、局间叠加层）
 - CSS 变量 + 响应式 Grid/Flex 布局
 
 ## 实时通信事件
 
 | 事件 | 方向 | 说明 |
 |------|------|------|
-| `lobby:subscribe` | C→S | 订阅大厅房间列表 |
-| `lobby:rooms` | S→C | 广播房间摘要 |
+| `lobby:subscribe { gameType }` | C→S | 订阅指定游戏的大厅房间列表 |
+| `lobby:rooms` | S→C | 广播房间摘要（按订阅游戏过滤） |
 | `room:join` | C→S | 加入房间 |
 | `room:updated` | S→C | 房间详情更新 |
-| `room:add-bot` | C→S | 房主添加电脑 |
-| `room:update-queue` | C→S | 更新游戏队列 |
-| `room:set-roles` | C→S | 设置玩家/旁观 |
-| `game:start` | C→S | 房主开始下一局 |
+| `room:add-bot` | C→S | 房主添加电脑（仅局间） |
+| `room:set-roles` | C→S | 设置玩家/旁观（仅局间） |
+| `game:start` | C→S | 房主开始游戏 / 再来一局 |
 | `game:state` | S→C | 游戏状态同步（达芬奇按玩家视角脱敏单独下发） |
 | `game:undercover:*` | C→S | 卧底描述/投票 |
 | `game:davinci:guess` | C→S | 达芬奇猜测对手暗牌 |
@@ -83,7 +95,7 @@ flowchart TB
 
 ## 数据持久化策略
 
-- **持久化**：用户、房间元数据、成员、游戏队列
+- **持久化**：用户、房间元数据（含固定 `game_type`）、成员
 - **内存**：进行中的游戏状态（`RoomManager.games` Map）
   - 适合实时对战，重启后需重新开局
   - 后续可扩展写入 `game_sessions.state_json`
@@ -100,4 +112,4 @@ flowchart TB
 2. 在 `game-engine` 实现 `createXxxGame` 与操作函数
 3. 在 `RoomManager` 注册创建与处理逻辑
 4. 在 `socket/index.ts` 添加事件处理
-5. 在 `web` 添加游戏 UI 组件
+5. 在 `web` 添加游戏 UI 组件，并在 `HomePage` / `GameLobbyPage` 自动展示
