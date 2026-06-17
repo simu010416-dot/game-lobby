@@ -1,10 +1,18 @@
 import { Suspense, lazy, useEffect, useRef, useState, type CSSProperties } from 'react';
 import {
+  isMusicEnabled,
+  isSfxEnabled,
   playDrawSound,
   playGuessCorrect,
   playGuessWrong,
   playPlaceJoker,
   playTurnSound,
+  playVictorySound,
+  setMusicEnabled,
+  setSfxEnabled,
+  unlockAudio,
+  startBackgroundMusic,
+  stopBackgroundMusic,
 } from '../../lib/game-sounds';
 import { JOKER_VALUE } from '../../types/game';
 import type { DaVinciColor, DaVinciGameState, DaVinciTile } from '../../types/game';
@@ -127,9 +135,15 @@ export function DaVinciGame({
   onPlaceJoker,
   onSubmitSetup,
 }: Props) {
+  const assistMode = state.assistMode !== false;
   const current = state.players[state.currentPlayerIndex];
   const isMyTurn = !isSpectator && current?.id === myMemberId && state.phase === 'playing';
   const [selected, setSelected] = useState<{ targetId: string; tileIndex: number } | null>(null);
+  const [infoPanelOpen, setInfoPanelOpen] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(true);
+  const [guessPanelOpen, setGuessPanelOpen] = useState(true);
+  const [sfxOn, setSfxOn] = useState(isSfxEnabled);
+  const [musicOn, setMusicOn] = useState(isMusicEnabled);
 
   // Accumulate a guess log from the rolling `lastAction` the server sends.
   const [history, setHistory] = useState<HistoryEntry[]>([]);
@@ -156,6 +170,24 @@ export function DaVinciGame({
   useEffect(() => {
     if (!isMyTurn || state.stage !== 'guessing') setSelected(null);
   }, [isMyTurn, state.stage, state.currentPlayerIndex]);
+
+  // Background music while the match is active.
+  useEffect(() => {
+    if (state.phase !== 'ended') {
+      startBackgroundMusic();
+    } else {
+      stopBackgroundMusic();
+    }
+    return () => stopBackgroundMusic();
+  }, [state.phase]);
+
+  const prevPhaseRef = useRef(state.phase);
+  useEffect(() => {
+    if (prevPhaseRef.current !== 'ended' && state.phase === 'ended' && state.winnerId) {
+      playVictorySound();
+    }
+    prevPhaseRef.current = state.phase;
+  }, [state.phase, state.winnerId]);
 
   // Game sound effects — keyed off server state transitions.
   const actionSigRef = useRef<string | null>(null);
@@ -204,7 +236,7 @@ export function DaVinciGame({
   }, [state.currentPlayerIndex, state.stage, state.drawnTile, state.phase]);
 
   const candidates =
-    selected && isMyTurn
+    assistMode && selected && isMyTurn
       ? computeCandidates(state, myMemberId, selected.targetId, selected.tileIndex)
       : [];
   const candidateSet = new Set(candidates);
@@ -214,7 +246,9 @@ export function DaVinciGame({
       ? state.players.find((p) => p.id === selected.targetId)?.rack[selected.tileIndex] ?? null
       : null;
   const jokerGuessPossible =
-    selectedTile != null && jokerStillPossible(state, myMemberId, selectedTile.color);
+    state.useJoker &&
+    selectedTile != null &&
+    (assistMode ? jokerStillPossible(state, myMemberId, selectedTile.color) : true);
 
   function handleGuess(value: number) {
     if (!selected) return;
@@ -294,38 +328,108 @@ export function DaVinciGame({
 
       {/* Overlay layer: panels capture clicks, the gaps fall through to the canvas. */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', zIndex: 2 }}>
-        {/* Top-left: title, status & deck info */}
+        {/* Top-left: title, status, audio */}
         <div
           style={{
             position: 'absolute',
             top: 12,
             left: 12,
-            maxWidth: 'min(60%, 360px)',
+            maxWidth: infoPanelOpen ? 'min(60%, 360px)' : undefined,
             pointerEvents: 'auto',
             ...panelStyle,
           }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <button
+            type="button"
+            onClick={() => setInfoPanelOpen((o) => !o)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.5rem',
+              width: '100%',
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--text)',
+              cursor: 'pointer',
+              marginBottom: infoPanelOpen ? '0.35rem' : 0,
+            }}
+          >
             <strong style={{ fontSize: '1rem' }}>达芬奇密码</strong>
-            {inSetup ? (
-              <span style={{ fontSize: '0.78rem', color: '#c4b5fd' }}>开局摆放 · {readyCount}/{totalSetup}</span>
-            ) : (
-              <>
-                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>牌堆 {state.deckCount}</span>
-                {drawnLabel && (
-                  <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                    {current?.id === myMemberId ? '你抽到 ' : `${current?.name ?? '当前'}抽到 `}
-                    <strong style={{ color: 'var(--text)' }}>{drawnLabel}</strong>
-                  </span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', fontWeight: 400 }}>
+              {infoPanelOpen ? '收起 ▲' : '展开 ▼'}
+            </span>
+          </button>
+          {infoPanelOpen ? (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                {inSetup ? (
+                  <span style={{ fontSize: '0.78rem', color: '#c4b5fd' }}>开局摆放 · {readyCount}/{totalSetup}</span>
+                ) : (
+                  <>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>牌堆 {state.deckCount}</span>
+                    {drawnLabel && (
+                      <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                        {current?.id === myMemberId ? '你抽到 ' : `${current?.name ?? '当前'}抽到 `}
+                        <strong style={{ color: 'var(--text)' }}>{drawnLabel}</strong>
+                      </span>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </div>
-          <p style={{ margin: '0.35rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-            {inSetup
-              ? '牌桌暂不上牌，请在下方完成摆放。全员确认后同时发牌，避免暴露 Joker。'
-              : state.message}
-          </p>
+                <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                  辅助：{assistMode ? '开' : '关'}
+                </span>
+              </div>
+              <p style={{ margin: '0.35rem 0 0', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                {inSetup
+                  ? '牌桌暂不上牌，请在下方完成摆放。全员确认后同时发牌，避免暴露 Joker。'
+                  : state.message}
+              </p>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '0.35rem',
+                  marginTop: '0.45rem',
+                  flexWrap: 'wrap',
+                }}
+              >
+                <AudioToggle
+                  label="音效"
+                  active={sfxOn}
+                  onToggle={() => {
+                    const next = !sfxOn;
+                    setSfxOn(next);
+                    setSfxEnabled(next);
+                  }}
+                />
+                <AudioToggle
+                  label="音乐"
+                  active={musicOn}
+                  onToggle={() => {
+                    const next = !musicOn;
+                    setMusicOn(next);
+                    setMusicEnabled(next);
+                    if (next) {
+                      startBackgroundMusic();
+                      unlockAudio();
+                    }
+                  }}
+                />
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              {inSetup ? (
+                <span>摆放 {readyCount}/{totalSetup}</span>
+              ) : (
+                <span>牌堆 {state.deckCount}</span>
+              )}
+              <span>·</span>
+              <span>{sfxOn ? '🔊' : '🔇'}</span>
+              <span>{musicOn ? '🎵' : '🔕'}</span>
+            </div>
+          )}
         </div>
 
         {/* Top-right: guess history log */}
@@ -334,42 +438,65 @@ export function DaVinciGame({
             position: 'absolute',
             top: 12,
             right: 12,
-            width: 'min(46%, 240px)',
-            maxHeight: '46%',
+            width: historyOpen ? 'min(46%, 240px)' : 'auto',
+            maxHeight: historyOpen ? '46%' : undefined,
             display: 'flex',
             flexDirection: 'column',
             pointerEvents: 'auto',
             ...panelStyle,
           }}
         >
-          <div style={{ fontSize: '0.82rem', fontWeight: 700, marginBottom: '0.4rem' }}>猜测记录</div>
-          <div style={{ overflowY: 'auto', display: 'grid', gap: '0.3rem', paddingRight: 2 }}>
-            {history.length === 0 ? (
-              <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>暂无记录</span>
-            ) : (
-              history.map((h) => (
-                <div
-                  key={h.id}
-                  style={{
-                    fontSize: '0.76rem',
-                    lineHeight: 1.35,
-                    padding: '0.3rem 0.45rem',
-                    borderRadius: 6,
-                    background: 'rgba(255,255,255,0.04)',
-                    borderLeft: `3px solid ${h.correct ? 'var(--success)' : 'var(--danger)'}`,
-                    color: 'var(--text)',
-                  }}
-                >
-                  <span style={{ color: 'var(--text-muted)' }}>{h.guesserName}</span> 猜{' '}
-                  <span style={{ color: 'var(--text-muted)' }}>{h.targetName}</span> 第{h.position + 1}张（
-                  {h.color === 'white' ? '白' : '黑'}）={h.guessedValue}{' '}
-                  <span style={{ color: h.correct ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }}>
-                    {h.correct ? '✓中' : '✗错'}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
+          <button
+            type="button"
+            onClick={() => setHistoryOpen((o) => !o)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '0.5rem',
+              width: '100%',
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--text)',
+              fontSize: '0.82rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              marginBottom: historyOpen ? '0.4rem' : 0,
+            }}
+          >
+            <span>猜测记录{!historyOpen && history.length > 0 ? ` (${history.length})` : ''}</span>
+            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{historyOpen ? '收起 ▲' : '展开 ▼'}</span>
+          </button>
+          {historyOpen && (
+            <div style={{ overflowY: 'auto', display: 'grid', gap: '0.3rem', paddingRight: 2 }}>
+              {history.length === 0 ? (
+                <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>暂无记录</span>
+              ) : (
+                history.map((h) => (
+                  <div
+                    key={h.id}
+                    style={{
+                      fontSize: '0.76rem',
+                      lineHeight: 1.35,
+                      padding: '0.3rem 0.45rem',
+                      borderRadius: 6,
+                      background: 'rgba(255,255,255,0.04)',
+                      borderLeft: `3px solid ${h.correct ? 'var(--success)' : 'var(--danger)'}`,
+                      color: 'var(--text)',
+                    }}
+                  >
+                    <span style={{ color: 'var(--text-muted)' }}>{h.guesserName}</span> 猜{' '}
+                    <span style={{ color: 'var(--text-muted)' }}>{h.targetName}</span> 第{h.position + 1}张（
+                    {h.color === 'white' ? '白' : '黑'}）={h.guessedValue}{' '}
+                    <span style={{ color: h.correct ? 'var(--success)' : 'var(--danger)', fontWeight: 700 }}>
+                      {h.correct ? '✓中' : '✗错'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
         </div>
 
         {/* Bottom-center: actions */}
@@ -448,14 +575,33 @@ export function DaVinciGame({
                 <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)', textAlign: 'center' }}>
                   点击一名对手的暗牌（带 ? 的牌）来猜测它的数字。
                 </p>
-              ) : (
+              ) : guessPanelOpen ? (
                 <div style={{ display: 'grid', gap: '0.5rem' }}>
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center' }}>
-                    选择数字进行猜测（高亮为仍然可能的值）：
-                  </p>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                      {assistMode
+                        ? '选择数字进行猜测（高亮为仍然可能的值）：'
+                        : '选择数字进行猜测（无辅助，可猜任意数字）：'}
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ padding: '0.2rem 0.5rem', fontSize: '0.72rem', minWidth: 0, flexShrink: 0 }}
+                      onClick={() => setGuessPanelOpen(false)}
+                    >
+                      收起
+                    </button>
+                  </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', justifyContent: 'center' }}>
                     {Array.from({ length: MAX_VALUE + 1 }, (_, v) => {
-                      const possible = candidateSet.has(v);
+                      const possible = !assistMode || candidateSet.has(v);
                       return (
                         <button
                           key={v}
@@ -465,7 +611,7 @@ export function DaVinciGame({
                           style={{
                             minWidth: 40,
                             opacity: possible ? 1 : 0.4,
-                            background: possible ? undefined : 'var(--surface-2)',
+                            background: assistMode && !possible ? 'var(--surface-2)' : undefined,
                           }}
                         >
                           {v}
@@ -487,6 +633,21 @@ export function DaVinciGame({
                       取消
                     </button>
                   </div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                  <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>已选中暗牌，选数面板已收起</span>
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ padding: '0.35rem 0.75rem', fontSize: '0.82rem' }}
+                    onClick={() => setGuessPanelOpen(true)}
+                  >
+                    展开选数
+                  </button>
+                  <button className="btn btn-secondary" onClick={() => setSelected(null)}>
+                    取消
+                  </button>
                 </div>
               )}
             </div>
@@ -594,6 +755,35 @@ function MiniTile({ tile }: { tile: DaVinciTile }) {
     >
       {tileText(tile)}
     </div>
+  );
+}
+
+function AudioToggle({
+  label,
+  active,
+  onToggle,
+}: {
+  label: string;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={`${active ? '关闭' : '开启'}${label}`}
+      style={{
+        padding: '0.2rem 0.55rem',
+        fontSize: '0.72rem',
+        borderRadius: 6,
+        border: '1px solid rgba(255,255,255,0.12)',
+        background: active ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.04)',
+        color: active ? '#c7d2fe' : 'var(--text-muted)',
+        cursor: 'pointer',
+      }}
+    >
+      {active ? '🔊' : '🔇'} {label}
+    </button>
   );
 }
 

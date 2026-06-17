@@ -35,6 +35,7 @@ export interface GameParticipant {
 
 export interface GameOptions {
   useJoker?: boolean;
+  assistMode?: boolean;
 }
 
 export function createGame(
@@ -46,7 +47,10 @@ export function createGame(
     case 'undercover':
       return createUndercoverGame(participants, pickRandom(UNDERCOVER_WORD_PAIRS));
     case 'da_vinci_code':
-      return createDaVinciGame(participants, { useJoker: options.useJoker });
+      return createDaVinciGame(participants, {
+        useJoker: options.useJoker,
+        assistMode: options.assistMode,
+      });
   }
 }
 

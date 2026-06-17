@@ -65,6 +65,8 @@ export interface DaVinciGameState {
   message: string;
   // Whether this match includes the two Joker tiles.
   useJoker: boolean;
+  // Room-wide UI assist: highlight still-possible guess values. Locked at game start.
+  assistMode: boolean;
   // When stage === 'placing', describes the pending Joker placement: faceUp is
   // true for a wrong-guess penalty (placed revealed), false when settling
   // (placed face down). null otherwise.
@@ -143,9 +145,10 @@ function startingTileCount(playerCount: number): number {
 
 export function createDaVinciGame(
   participants: { id: string; name: string; isBot: boolean }[],
-  options: { useJoker?: boolean } = {},
+  options: { useJoker?: boolean; assistMode?: boolean } = {},
 ): DaVinciGameState {
   const useJoker = options.useJoker ?? false;
+  const assistMode = options.assistMode ?? true;
   const deck = shuffle(buildDeck(useJoker));
   const count = startingTileCount(participants.length);
 
@@ -181,6 +184,7 @@ export function createDaVinciGame(
     winnerId: null,
     message: useJoker ? '摆放阶段：安排你的起始牌（可移动 Joker），完成后确认。' : '',
     useJoker,
+    assistMode,
     placement: null,
     setupReady: useJoker ? botIds : [],
   };

@@ -78,7 +78,7 @@ export function emitSetRoles(activePlayerIds: string[], spectatorIds: string[]) 
   });
 }
 
-export function emitStartGame(options: { useJoker?: boolean } = {}) {
+export function emitStartGame(options: { useJoker?: boolean; assistMode?: boolean } = {}) {
   return new Promise<{ ok: boolean; message?: string }>((resolve) => {
     socket?.emit('game:start', options, resolve);
   });

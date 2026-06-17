@@ -50,6 +50,7 @@ export function RoomPage() {
   const [error, setError] = useState('');
   const [botDifficulty, setBotDifficulty] = useState<AiDifficulty>('medium');
   const [useJoker, setUseJoker] = useState(false);
+  const [assistMode, setAssistMode] = useState(true);
 
   const gameTypeFromUrl = gameTypeParam as GameType;
   const lobbyPath = `/games/${gameTypeFromUrl}`;
@@ -117,12 +118,19 @@ export function RoomPage() {
     api.fetchRoom(token, roomId).then(setRoom).catch(() => {});
   }, [token, roomId]);
 
+  useEffect(() => {
+    if (gameType !== 'da_vinci_code' || !gameState || !isGameEnded(gameState)) return;
+    const s = gameState as DaVinciGameState;
+    setUseJoker(s.useJoker);
+    setAssistMode(s.assistMode ?? true);
+  }, [gameState, gameType]);
+
   async function handleAddBot() {
     await emitAddBot(botDifficulty);
   }
 
   async function handleStartGame() {
-    const res = await emitStartGame({ useJoker });
+    const res = await emitStartGame({ useJoker, assistMode });
     if (!res.ok) setError(res.message ?? '无法开始');
   }
 
@@ -236,17 +244,43 @@ export function RoomPage() {
       )}
 
       {room.gameType === 'da_vinci_code' && isHost && (
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            fontSize: '0.9rem',
-          }}
-        >
-          <input type="checkbox" checked={useJoker} onChange={(e) => setUseJoker(e.target.checked)} />
-          使用 Joker 牌（[-] 万能牌，可插入任意位置）
-        </label>
+        <div style={{ display: 'grid', gap: '0.5rem' }}>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.9rem',
+            }}
+          >
+            <input type="checkbox" checked={useJoker} onChange={(e) => setUseJoker(e.target.checked)} />
+            使用 Joker 牌（[-] 万能牌，可插入任意位置）
+          </label>
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              fontSize: '0.9rem',
+              opacity: isPlaying ? 0.6 : 1,
+            }}
+            title={isPlaying ? '本局进行中不可修改' : undefined}
+          >
+            <input
+              type="checkbox"
+              checked={assistMode}
+              disabled={isPlaying}
+              onChange={(e) => setAssistMode(e.target.checked)}
+            />
+            辅助模式（全员共享；高亮仍可猜测的数字，关闭后可猜任意数字）
+          </label>
+        </div>
+      )}
+
+      {room.gameType === 'da_vinci_code' && !isHost && isPlaying && gameState != null && (
+        <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+          本局辅助模式：{(gameState as DaVinciGameState).assistMode !== false ? '开启' : '关闭'}
+        </p>
       )}
 
       {isHost && (

@@ -65,6 +65,7 @@ export interface DaVinciGameState {
   winnerId: string | null;
   message: string;
   useJoker: boolean;
+  assistMode: boolean;
   placement: { faceUp: boolean } | null;
   setupReady: string[];
 }

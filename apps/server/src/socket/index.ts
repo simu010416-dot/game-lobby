@@ -30,7 +30,9 @@ const davinciSetupSchema = z.object({
     }),
   ),
 });
-const startGameSchema = z.object({ useJoker: z.boolean().optional() }).optional();
+const startGameSchema = z
+  .object({ useJoker: z.boolean().optional(), assistMode: z.boolean().optional() })
+  .optional();
 
 export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomManager) {
   roomManager.setRoomClosedListener(async (roomId, reason) => {
@@ -215,6 +217,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
 
       const parsedStart = startGameSchema.safeParse(payload);
       const useJoker = parsedStart.success ? parsedStart.data?.useJoker ?? false : false;
+      const assistMode = parsedStart.success ? parsedStart.data?.assistMode ?? true : true;
 
       const detail = await roomManager.getRoomDetail(roomId);
       const hostMember = detail?.players.find((p) => p.userId === user.id && p.role === 'host');
@@ -223,7 +226,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
         return;
       }
 
-      const result = await roomManager.startNextGame(roomId, hostMember.id, { useJoker });
+      const result = await roomManager.startNextGame(roomId, hostMember.id, { useJoker, assistMode });
       if (!result.ok) {
         cb?.({ ok: false, message: result.message });
         return;
