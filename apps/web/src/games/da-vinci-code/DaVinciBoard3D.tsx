@@ -2,7 +2,7 @@ import { Canvas, useFrame } from '@react-three/fiber';
 import { Html, OrbitControls, RoundedBox } from '@react-three/drei';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
-import type { DaVinciGameState, DaVinciTile } from '../../types/game';
+import type { DaVinciGameState, DaVinciTile } from '@game-lobby/game-engine';
 
 type EndState = 'none' | 'winner' | 'loser';
 

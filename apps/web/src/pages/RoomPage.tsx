@@ -8,19 +8,14 @@ import {
   type AiDifficulty,
   type GameType,
 } from '@game-lobby/shared';
+import type { DaVinciGameState } from '@game-lobby/game-engine';
 import { useAuth } from '../context/AuthContext';
 import * as api from '../lib/api';
 import {
   closeRoom,
   emitAddBot,
-  emitDaVinciDecision,
-  emitDaVinciGuess,
-  emitDaVinciPlace,
-  emitDaVinciSetup,
   emitSetRoles,
   emitStartGame,
-  emitUndercoverDescribe,
-  emitUndercoverVote,
   getSocket,
   joinRoom,
   leaveRoom,
@@ -29,13 +24,7 @@ import {
   onRoomKicked,
   onRoomUpdated,
 } from '../lib/socket';
-import { UndercoverGame } from '../components/games/UndercoverGame';
-import { DaVinciGame } from '../components/games/DaVinciGame';
-import type { DaVinciGameState, UndercoverGameState } from '../types/game';
-
-function isGameEnded(state: unknown): boolean {
-  return (state as { phase?: string })?.phase === 'ended';
-}
+import { GAME_REGISTRY, renderGameSettings } from '../games/registry';
 
 export function RoomPage() {
   const { gameType: gameTypeParam, roomId } = useParams<{ gameType: string; roomId: string }>();
@@ -54,6 +43,10 @@ export function RoomPage() {
 
   const gameTypeFromUrl = gameTypeParam as GameType;
   const lobbyPath = `/games/${gameTypeFromUrl}`;
+
+  const activeGameMod = gameType ? GAME_REGISTRY[gameType] : null;
+  const isGameEnded = (state: unknown) =>
+    activeGameMod ? activeGameMod.isEnded(state) : false;
 
   const myMember = useMemo(
     () => room?.players.find((p) => p.userId === user?.id) ?? null,
@@ -130,7 +123,8 @@ export function RoomPage() {
   }
 
   async function handleStartGame() {
-    const res = await emitStartGame({ useJoker, assistMode });
+    if (!room) return;
+    const res = await emitStartGame(room.gameType, { useJoker, assistMode });
     if (!res.ok) setError(res.message ?? '无法开始');
   }
 
@@ -176,6 +170,8 @@ export function RoomPage() {
   const activeCount = room.players.filter((p) => p.role !== 'spectator').length;
   const needsRoleSplit =
     meta && (activeCount > meta.maxPlayers || activeCount < meta.minPlayers);
+
+  const GameComponent = activeGameMod?.Component;
 
   const playerListPanel = (
     <section className="card">
@@ -243,45 +239,15 @@ export function RoomPage() {
         </p>
       )}
 
-      {room.gameType === 'da_vinci_code' && isHost && (
-        <div style={{ display: 'grid', gap: '0.5rem' }}>
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              fontSize: '0.9rem',
-            }}
-          >
-            <input type="checkbox" checked={useJoker} onChange={(e) => setUseJoker(e.target.checked)} />
-            使用 Joker 牌（[-] 万能牌，可插入任意位置）
-          </label>
-          <label
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '0.5rem',
-              fontSize: '0.9rem',
-              opacity: isPlaying ? 0.6 : 1,
-            }}
-            title={isPlaying ? '本局进行中不可修改' : undefined}
-          >
-            <input
-              type="checkbox"
-              checked={assistMode}
-              disabled={isPlaying}
-              onChange={(e) => setAssistMode(e.target.checked)}
-            />
-            辅助模式（全员共享；高亮仍可猜测的数字，关闭后可猜任意数字）
-          </label>
-        </div>
-      )}
-
-      {room.gameType === 'da_vinci_code' && !isHost && isPlaying && gameState != null && (
-        <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-          本局辅助模式：{(gameState as DaVinciGameState).assistMode !== false ? '开启' : '关闭'}
-        </p>
-      )}
+      {renderGameSettings(room.gameType, {
+        isHost,
+        isPlaying,
+        gameState: gameState as import('@game-lobby/game-engine').GameState | null,
+        useJoker,
+        setUseJoker,
+        assistMode,
+        setAssistMode,
+      })}
 
       {isHost && (
         <button
@@ -329,25 +295,11 @@ export function RoomPage() {
       )}
 
       <div style={{ position: 'relative' }}>
-        {gameType === 'undercover' && gameState != null ? (
-          <UndercoverGame
-            state={gameState as UndercoverGameState}
+        {GameComponent && gameState != null ? (
+          <GameComponent
+            state={gameState as import('@game-lobby/game-engine').GameState}
             myMemberId={myMember?.id ?? null}
             isSpectator={isSpectator}
-            onDescribe={emitUndercoverDescribe}
-            onVote={emitUndercoverVote}
-          />
-        ) : null}
-
-        {gameType === 'da_vinci_code' && gameState != null ? (
-          <DaVinciGame
-            state={gameState as DaVinciGameState}
-            myMemberId={myMember?.id ?? null}
-            isSpectator={isSpectator}
-            onGuess={emitDaVinciGuess}
-            onDecision={emitDaVinciDecision}
-            onPlaceJoker={emitDaVinciPlace}
-            onSubmitSetup={emitDaVinciSetup}
           />
         ) : null}
 

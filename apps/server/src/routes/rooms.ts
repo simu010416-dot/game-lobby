@@ -3,9 +3,9 @@ import { z } from 'zod';
 import type { Database } from '@game-lobby/db';
 import type { AuthRequest } from '../middleware/auth.js';
 import type { RoomManager } from '../services/room-manager.js';
-import { GAME_META } from '@game-lobby/shared';
+import { GAME_META, GAME_TYPE_ZOD_VALUES } from '@game-lobby/shared';
 
-const gameTypeSchema = z.enum(['undercover', 'da_vinci_code']);
+const gameTypeSchema = z.enum(GAME_TYPE_ZOD_VALUES);
 
 const createRoomSchema = z.object({
   name: z.string().min(1).max(64),

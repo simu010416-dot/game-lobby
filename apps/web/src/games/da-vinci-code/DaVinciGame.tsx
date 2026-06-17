@@ -13,10 +13,16 @@ import {
   unlockAudio,
   startBackgroundMusic,
   stopBackgroundMusic,
-} from '../../lib/game-sounds';
-import { JOKER_VALUE } from '../../types/game';
-import type { DaVinciColor, DaVinciGameState, DaVinciTile } from '../../types/game';
-import type { DaVinciLastAction } from '../../types/game';
+} from './game-sounds';
+import {
+  JOKER_VALUE,
+  computeDaVinciCandidates,
+  jokerStillPossible,
+  type DaVinciColor,
+  type DaVinciGameState,
+  type DaVinciTile,
+  type DaVinciLastAction,
+} from '@game-lobby/game-engine';
 
 const DaVinciBoard3D = lazy(() =>
   import('./DaVinciBoard3D').then((m) => ({ default: m.DaVinciBoard3D })),
@@ -35,93 +41,6 @@ interface Props {
 function tileText(tile: DaVinciTile): string {
   if (tile.isJoker) return '-';
   return tile.value >= 0 ? String(tile.value) : '?';
-}
-
-const MAX_VALUE = 11;
-const MAX_KEY = MAX_VALUE * 2 + 1;
-
-function tileKey(tile: { color: DaVinciColor; value: number }): number {
-  return tile.value * 2 + (tile.color === 'white' ? 1 : 0);
-}
-
-// Mirror of the engine's deduction: which values can a given face-down opponent
-// tile still hold, given what this client can see. Used purely as a hint.
-function computeCandidates(
-  state: DaVinciGameState,
-  viewerId: string | null,
-  targetId: string,
-  tileIndex: number,
-): number[] {
-  const target = state.players.find((p) => p.id === targetId);
-  if (!target) return [];
-  const tile = target.rack[tileIndex];
-  if (!tile || tile.revealed) return [];
-  const parity = tile.color === 'white' ? 1 : 0;
-
-  const used = new Set<number>();
-  for (const p of state.players) {
-    for (const t of p.rack) {
-      if (t.isJoker || t.value < 0) continue;
-      if (t.revealed || p.id === viewerId) used.add(tileKey(t));
-    }
-  }
-  const cur = state.players[state.currentPlayerIndex];
-  if (cur && cur.id === viewerId && state.drawnTile && !state.drawnTile.isJoker && state.drawnTile.value >= 0) {
-    used.add(tileKey(state.drawnTile));
-  }
-
-  let leftBound: number;
-  let rightBound: number;
-  if (state.useJoker) {
-    // A hidden tile might be a Joker, so positional ordering can't narrow it.
-    leftBound = 0;
-    rightBound = MAX_KEY;
-  } else {
-    leftBound = tileIndex;
-    for (let a = tileIndex - 1; a >= 0; a--) {
-      const t = target.rack[a]!;
-      if (t.revealed) {
-        leftBound = tileKey(t) + (tileIndex - a);
-        break;
-      }
-    }
-    rightBound = MAX_KEY - (target.rack.length - 1 - tileIndex);
-    for (let b = tileIndex + 1; b < target.rack.length; b++) {
-      const t = target.rack[b]!;
-      if (t.revealed) {
-        rightBound = tileKey(t) - (b - tileIndex);
-        break;
-      }
-    }
-  }
-
-  const candidates: number[] = [];
-  for (let k = Math.max(0, leftBound); k <= Math.min(MAX_KEY, rightBound); k++) {
-    if (k % 2 !== parity) continue;
-    if (used.has(k)) continue;
-    candidates.push((k - parity) / 2);
-  }
-  return candidates;
-}
-
-// Could the still-hidden tile be a Joker the viewer can't account for yet?
-function jokerStillPossible(
-  state: DaVinciGameState,
-  viewerId: string | null,
-  color: DaVinciColor,
-): boolean {
-  if (!state.useJoker) return false;
-  for (const p of state.players) {
-    for (const t of p.rack) {
-      if (!t.isJoker || t.color !== color) continue;
-      if (t.revealed || p.id === viewerId) return false;
-    }
-  }
-  const cur = state.players[state.currentPlayerIndex];
-  if (cur && cur.id === viewerId && state.drawnTile?.isJoker && state.drawnTile.color === color) {
-    return false;
-  }
-  return true;
 }
 
 type HistoryEntry = DaVinciLastAction & { id: number };
@@ -236,8 +155,8 @@ export function DaVinciGame({
   }, [state.currentPlayerIndex, state.stage, state.drawnTile, state.phase]);
 
   const candidates =
-    assistMode && selected && isMyTurn
-      ? computeCandidates(state, myMemberId, selected.targetId, selected.tileIndex)
+    assistMode && selected && isMyTurn && myMemberId
+      ? computeDaVinciCandidates(state, myMemberId, selected.targetId, selected.tileIndex)
       : [];
   const candidateSet = new Set(candidates);
 
@@ -248,6 +167,7 @@ export function DaVinciGame({
   const jokerGuessPossible =
     state.useJoker &&
     selectedTile != null &&
+    myMemberId != null &&
     (assistMode ? jokerStillPossible(state, myMemberId, selectedTile.color) : true);
 
   function handleGuess(value: number) {
@@ -600,7 +520,7 @@ export function DaVinciGame({
                     </button>
                   </div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', justifyContent: 'center' }}>
-                    {Array.from({ length: MAX_VALUE + 1 }, (_, v) => {
+                    {Array.from({ length: 12 }, (_, v) => {
                       const possible = !assistMode || candidateSet.has(v);
                       return (
                         <button

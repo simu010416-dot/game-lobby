@@ -5,21 +5,9 @@ import type { AiDifficulty, GameType, RoomDetail, RoomPlayer, RoomSummary } from
 import { GAME_META } from '@game-lobby/shared';
 import {
   createGame,
-  submitUndercoverDescription,
-  submitUndercoverVote,
-  generateBotDescription,
-  generateBotVote,
-  guessDaVinciTile,
-  decideDaVinciContinue,
-  placeDaVinciJoker,
-  submitDaVinciSetup,
-  generateBotDaVinciMove,
-  generateBotDaVinciDecision,
-  generateBotDaVinciPlacement,
-  type GameOptions,
+  getGameModule,
+  type GameStartOptions,
   type GameState,
-  type UndercoverGameState,
-  type DaVinciGameState,
 } from '@game-lobby/game-engine';
 
 interface InMemoryGame {
@@ -74,7 +62,15 @@ export class RoomManager {
   }
 
   private isGameEnded(game: InMemoryGame): boolean {
-    return (game.state as { phase?: string }).phase === 'ended';
+    return getGameModule(game.gameType).isEnded(game.state);
+  }
+
+  isGameStateEnded(gameType: GameType, state: GameState): boolean {
+    return getGameModule(gameType).isEnded(state);
+  }
+
+  touchGameRoom(roomId: string) {
+    this.touchRoom(roomId);
   }
 
   private getTimeoutStatus(room: typeof rooms.$inferSelect): {
@@ -468,7 +464,7 @@ export class RoomManager {
   async startNextGame(
     roomId: string,
     requesterId: string,
-    options: GameOptions = {},
+    options: GameStartOptions<GameType> = {} as GameStartOptions<GameType>,
   ): Promise<
     | { ok: true; detail: RoomDetail; gameState: GameState; gameType: GameType }
     | { ok: false; message: string }
@@ -484,18 +480,17 @@ export class RoomManager {
     }
 
     const nextGame = detail.gameType;
+    const mod = getGameModule(nextGame);
 
-    if (nextGame === 'undercover') {
-      const activeBots = detail.players.filter((p) => p.isBot && p.role !== 'spectator');
-      for (const bot of activeBots) {
-        await this.db
-          .update(roomMembers)
-          .set({ role: 'spectator' })
-          .where(eq(roomMembers.id, bot.id));
-      }
+    const spectatorIds = mod.preStartSpectatorIds?.(detail) ?? [];
+    for (const memberId of spectatorIds) {
+      await this.db
+        .update(roomMembers)
+        .set({ role: 'spectator' })
+        .where(eq(roomMembers.id, memberId));
     }
 
-    const roster = nextGame === 'undercover' ? await this.getRoomDetail(roomId) : detail;
+    const roster = spectatorIds.length > 0 ? await this.getRoomDetail(roomId) : detail;
     if (!roster) return { ok: false, message: '房间不存在' };
 
     const meta = GAME_META[nextGame];
@@ -504,10 +499,7 @@ export class RoomManager {
     );
 
     if (activePlayers.length < meta.minPlayers) {
-      const hint =
-        nextGame === 'undercover'
-          ? '（电脑无法参与谁是卧底，已自动设为旁观）'
-          : '';
+      const hint = mod.insufficientPlayersHint?.() ?? '';
       return {
         ok: false,
         message: `「${meta.name}」需要至少 ${meta.minPlayers} 名玩家，当前仅 ${activePlayers.length} 名。${hint}`,
@@ -548,86 +540,6 @@ export class RoomManager {
     return this.getRoomDetail(roomId);
   }
 
-  async processUndercoverDescribe(roomId: string, playerId: string, description: string) {
-    const game = this.games.get(roomId);
-    if (!game || game.gameType !== 'undercover') return null;
-    game.state = submitUndercoverDescription(game.state as UndercoverGameState, playerId, description);
-    this.touchRoom(roomId);
-    return game;
-  }
-
-  async processUndercoverVote(roomId: string, voterId: string, targetId: string) {
-    const game = this.games.get(roomId);
-    if (!game || game.gameType !== 'undercover') return null;
-    game.state = submitUndercoverVote(game.state as UndercoverGameState, voterId, targetId);
-    this.touchRoom(roomId);
-    if ((game.state as UndercoverGameState).phase === 'ended') {
-      await this.markGameEnded(roomId);
-    }
-    return game;
-  }
-
-  async processDaVinciGuess(
-    roomId: string,
-    playerId: string,
-    targetPlayerId: string,
-    tileIndex: number,
-    value: number,
-  ) {
-    const game = this.games.get(roomId);
-    if (!game || game.gameType !== 'da_vinci_code') return null;
-    game.state = guessDaVinciTile(
-      game.state as DaVinciGameState,
-      playerId,
-      targetPlayerId,
-      tileIndex,
-      value,
-    );
-    this.touchRoom(roomId);
-    if ((game.state as DaVinciGameState).phase === 'ended') {
-      await this.markGameEnded(roomId);
-    }
-    return game;
-  }
-
-  async processDaVinciDecision(roomId: string, playerId: string, shouldContinue: boolean) {
-    const game = this.games.get(roomId);
-    if (!game || game.gameType !== 'da_vinci_code') return null;
-    game.state = decideDaVinciContinue(
-      game.state as DaVinciGameState,
-      playerId,
-      shouldContinue,
-    );
-    this.touchRoom(roomId);
-    if ((game.state as DaVinciGameState).phase === 'ended') {
-      await this.markGameEnded(roomId);
-    }
-    return game;
-  }
-
-  async processDaVinciPlace(roomId: string, playerId: string, index: number) {
-    const game = this.games.get(roomId);
-    if (!game || game.gameType !== 'da_vinci_code') return null;
-    game.state = placeDaVinciJoker(game.state as DaVinciGameState, playerId, index);
-    this.touchRoom(roomId);
-    if ((game.state as DaVinciGameState).phase === 'ended') {
-      await this.markGameEnded(roomId);
-    }
-    return game;
-  }
-
-  async processDaVinciSetup(
-    roomId: string,
-    playerId: string,
-    tiles: { color: 'black' | 'white'; value: number; isJoker: boolean }[],
-  ) {
-    const game = this.games.get(roomId);
-    if (!game || game.gameType !== 'da_vinci_code') return null;
-    game.state = submitDaVinciSetup(game.state as DaVinciGameState, playerId, tiles);
-    this.touchRoom(roomId);
-    return game;
-  }
-
   async runBotTurns(roomId: string): Promise<InMemoryGame | null> {
     const game = this.games.get(roomId);
     if (!game) return null;
@@ -635,57 +547,28 @@ export class RoomManager {
     const detail = await this.getRoomDetail(roomId);
     if (!detail) return game;
 
+    const mod = getGameModule(game.gameType);
+    if (!mod.runBotTurn) return game;
+
     const before = JSON.stringify(game.state);
 
-    if (game.gameType === 'undercover') {
-      let state = game.state as UndercoverGameState;
-      const alive = state.players.filter((p) => p.isAlive);
+    for (const player of detail.players) {
+      if (!player.isBot || !player.botDifficulty) continue;
 
-      if (state.phase === 'describe') {
-        const speaker = alive[state.currentSpeakerIndex];
-        const member = detail.players.find((p) => p.id === speaker?.id);
-        if (speaker?.isBot && member?.botDifficulty) {
-          const desc = generateBotDescription(speaker, member.botDifficulty);
-          state = submitUndercoverDescription(state, speaker.id, desc);
-          game.state = state;
-        }
-      } else if (state.phase === 'vote') {
-        for (const p of alive) {
-          if (!p.isBot || state.votes[p.id]) continue;
-          const member = detail.players.find((m) => m.id === p.id);
-          if (!member?.botDifficulty) continue;
-          const target = generateBotVote(state, p.id, member.botDifficulty);
-          state = submitUndercoverVote(state, p.id, target);
-          game.state = state;
-          if (state.phase !== 'vote') break;
-        }
-      }
-    }
+      const next = mod.runBotTurn(game.state, {
+        difficulty: player.botDifficulty,
+        playerId: player.id,
+        playerName: player.displayName,
+        roomPlayers: detail.players,
+      });
 
-    if (game.gameType === 'da_vinci_code') {
-      const state = game.state as DaVinciGameState;
-      const current = state.players[state.currentPlayerIndex];
-      const member = detail.players.find((p) => p.id === current?.id);
-      if (current?.isBot && member?.botDifficulty && state.phase === 'playing') {
-        if (state.stage === 'guessing') {
-          const move = generateBotDaVinciMove(state, current.id, member.botDifficulty);
-          game.state = guessDaVinciTile(
-            state,
-            current.id,
-            move.targetPlayerId,
-            move.tileIndex,
-            move.value,
-          );
-        } else if (state.stage === 'placing') {
-          const index = generateBotDaVinciPlacement(state, current.id);
-          game.state = placeDaVinciJoker(state, current.id, index);
-        } else {
-          const keepGoing = generateBotDaVinciDecision(state, current.id, member.botDifficulty);
-          game.state = decideDaVinciContinue(state, current.id, keepGoing);
-        }
-        if ((game.state as DaVinciGameState).phase === 'ended') {
+      if (next && JSON.stringify(next) !== JSON.stringify(game.state)) {
+        game.state = next as GameState;
+        if (mod.isEnded(game.state)) {
           await this.markGameEnded(roomId);
         }
+        this.touchRoom(roomId);
+        return game;
       }
     }
 

@@ -78,36 +78,21 @@ export function emitSetRoles(activePlayerIds: string[], spectatorIds: string[]) 
   });
 }
 
-export function emitStartGame(options: { useJoker?: boolean; assistMode?: boolean } = {}) {
-  return new Promise<{ ok: boolean; message?: string }>((resolve) => {
-    socket?.emit('game:start', options, resolve);
-  });
+export function getActiveSocket(): Socket | null {
+  return socket;
 }
 
-export function emitUndercoverDescribe(description: string) {
-  socket?.emit('game:undercover:describe', { description });
-}
-
-export function emitUndercoverVote(targetId: string) {
-  socket?.emit('game:undercover:vote', { targetId });
-}
-
-export function emitDaVinciGuess(targetPlayerId: string, tileIndex: number, value: number) {
-  socket?.emit('game:davinci:guess', { targetPlayerId, tileIndex, value });
-}
-
-export function emitDaVinciDecision(shouldContinue: boolean) {
-  socket?.emit('game:davinci:decision', { continue: shouldContinue });
-}
-
-export function emitDaVinciPlace(index: number) {
-  socket?.emit('game:davinci:place', { index });
-}
-
-export function emitDaVinciSetup(
-  tiles: { color: 'black' | 'white'; value: number; isJoker: boolean }[],
+export function emitStartGame(
+  gameType: GameType,
+  options: { useJoker?: boolean; assistMode?: boolean } = {},
 ) {
-  socket?.emit('game:davinci:setup', { tiles });
+  return new Promise<{ ok: boolean; message?: string }>((resolve) => {
+    const payload =
+      gameType === 'da_vinci_code'
+        ? { useJoker: options.useJoker ?? false, assistMode: options.assistMode ?? true }
+        : {};
+    socket?.emit('game:start', payload, resolve);
+  });
 }
 
 export function leaveRoom() {

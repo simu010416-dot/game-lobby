@@ -1,11 +1,5 @@
 import type { AiDifficulty } from '@game-lobby/shared';
 
-export interface BotContext {
-  difficulty: AiDifficulty;
-  playerId: string;
-  playerName: string;
-}
-
 export function pickRandom<T>(items: T[]): T {
   return items[Math.floor(Math.random() * items.length)]!;
 }

@@ -54,21 +54,31 @@ export interface ApiError {
   code?: string;
 }
 
-export const GAME_META: Record<
-  GameType,
-  { name: string; minPlayers: number; maxPlayers: number; description: string }
-> = {
+export interface GameMetaEntry {
+  name: string;
+  minPlayers: number;
+  maxPlayers: number;
+  description: string;
+  botsAllowed: boolean;
+  requiresPerPlayerState: boolean;
+}
+
+export const GAME_META: Record<GameType, GameMetaEntry> = {
   undercover: {
     name: '谁是卧底',
     minPlayers: 4,
     maxPlayers: 12,
     description: '平民与卧底轮流描述词语，投票找出卧底。',
+    botsAllowed: false,
+    requiresPerPlayerState: false,
   },
   da_vinci_code: {
     name: '达芬奇密码',
     minPlayers: 2,
     maxPlayers: 4,
     description: '推理并猜出对手隐藏的数字牌，最后存活的玩家获胜。',
+    botsAllowed: true,
+    requiresPerPlayerState: true,
   },
 };
 
@@ -80,5 +90,8 @@ export const AI_DIFFICULTY_LABELS: Record<AiDifficulty, string> = {
 };
 
 export const ALL_GAME_TYPES: GameType[] = ['undercover', 'da_vinci_code'];
+
+/** Tuple for Zod `z.enum()` — single source with ALL_GAME_TYPES */
+export const GAME_TYPE_ZOD_VALUES = ALL_GAME_TYPES as [GameType, ...GameType[]];
 
 export const ALL_AI_DIFFICULTIES: AiDifficulty[] = ['easy', 'medium', 'hard', 'expert'];

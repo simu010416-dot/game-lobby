@@ -1,5 +1,5 @@
 import type { AiDifficulty } from '@game-lobby/shared';
-import { pickRandom, shouldBotMakeMistake } from '../../ai/utils.js';
+import { pickRandom, shouldBotMakeMistake } from '@game-lobby/game-core';
 import { UNDERCOVER_HINTS } from './words.js';
 
 export type UndercoverPhase = 'describe' | 'vote' | 'reveal' | 'ended';

@@ -31,85 +31,94 @@ flowchart TB
   RM --> Mem
 ```
 
-## 导航与大厅结构
+## 包结构（游戏隔离）
 
-```mermaid
-flowchart LR
-  Home["/ 主页：选择游戏"] --> GameLobby["/games/:gameType 游戏大厅"]
-  GameLobby --> Room["/games/:gameType/room/:id 固定游戏房间"]
+```
+packages/
+  shared/              # GameType, GAME_META, 房间类型
+  game-core/           # GameModule 接口、BotContext、ai/utils
+  games/
+    undercover/        # @game-lobby/game-undercover + logic.test.ts
+    da-vinci-code/     # @game-lobby/game-da-vinci-code + logic.test.ts
+    _template/         # 新游戏脚手架说明
+  game-engine/         # gameRegistry 聚合 + re-export
+  db/
+
+apps/
+  server/src/games/    # 每游戏 socket 注册
+  web/src/games/       # 每游戏 UI + registry.tsx
 ```
 
-- 主页展示所有游戏卡片及各游戏在线房间数
-- 游戏大厅仅显示该 `gameType` 的房间，在此创建房间
-- 房间绑定单一游戏，局间可调整人员与设置，房主可「再来一局」
+### 依赖关系
+
+- 各游戏包只依赖 `game-core` + `shared`，**互不 import**
+- `game-engine` 聚合所有游戏模块，供 `server` / `web` 使用
+- `server` / `web` **不直接**依赖各 `game-*` 包
+
+## 导航与大厅结构
+
+- 主页展示所有游戏卡片（`ALL_GAME_TYPES`）
+- 游戏大厅仅显示该 `gameType` 的房间
+- 房间绑定单一游戏，局间可再来一局
 
 ## Monorepo 包职责
 
 ### `@game-lobby/shared`
 
-- 游戏类型、房间状态、AI 难度等 TypeScript 类型
-- `GAME_META`：各游戏名称、人数上下限、描述
-- 前后端共用，避免类型漂移
+- `GameType`、`GAME_META`（含 `botsAllowed`、`requiresPerPlayerState`）
+- `GAME_TYPE_ZOD_VALUES` 供 Zod enum 单一来源
 
-### `@game-lobby/db`
+### `@game-lobby/game-core`
 
-- Drizzle ORM Schema：`users`、`rooms`（含 `game_type`）、`room_members`、`game_sessions`
-- `createDb()` 工厂函数，供服务端注入
+- `GameModule` 接口：`create`、`isEnded`、`projectState`、`runBotTurn`、`preStartSpectatorIds`
+- 共享 AI 工具：`pickRandom`、`shuffle`、`shouldBotMakeMistake`
+
+### `@game-lobby/game-undercover` / `@game-lobby/game-da-vinci-code`
+
+- 纯函数 `logic.ts` + `module.ts`（实现 GameModule）
+- Vitest 单测：`pnpm --filter @game-lobby/game-undercover test`
 
 ### `@game-lobby/game-engine`
 
-- 纯函数游戏逻辑，不依赖 IO
-- `谁是卧底`：发词、描述、投票、胜负判定
-- `达芬奇密码`：发牌、抽牌、猜测对手暗牌、翻牌出局判定、按视角脱敏
-- 电脑 AI：基于难度的随机/失误策略
+- `gameRegistry` + `createGame` / `isGameEnded` / `projectGameState`
+- 对外 re-export 各游戏类型与 reducer
 
 ### `@game-lobby/server`
 
-- **REST**：注册、登录、按游戏过滤的房间列表/创建/详情
-- **WebSocket**：游戏大厅订阅、房间加入、游戏操作、实时广播
-- **RoomManager**：房间生命周期、角色分配、游戏会话（无多游戏队列）
+- **RoomManager**：通用房间与游戏生命周期，通过 `gameRegistry` 调用游戏逻辑
+- **apps/server/src/games/**：每游戏 socket 事件注册
 
 ### `@game-lobby/web`
 
-- 登录/注册页
-- 主页（游戏选择）
-- 游戏大厅（某游戏的房间列表）
-- 房间页（玩家管理、游戏设置、游戏 UI、局间叠加层）
-- CSS 变量 + 响应式 Grid/Flex 布局
+- **apps/web/src/games/registry.tsx**：`GAME_REGISTRY[gameType].Component`
+- **RoomPage**：薄壳，不随新游戏增长分支
 
 ## 实时通信事件
 
 | 事件 | 方向 | 说明 |
 |------|------|------|
-| `lobby:subscribe { gameType }` | C→S | 订阅指定游戏的大厅房间列表 |
-| `lobby:rooms` | S→C | 广播房间摘要（按订阅游戏过滤） |
-| `room:join` | C→S | 加入房间 |
-| `room:updated` | S→C | 房间详情更新 |
-| `room:add-bot` | C→S | 房主添加电脑（仅局间） |
-| `room:set-roles` | C→S | 设置玩家/旁观（仅局间） |
-| `game:start` | C→S | 房主开始游戏 / 再来一局 |
-| `game:state` | S→C | 游戏状态同步（达芬奇按玩家视角脱敏单独下发） |
+| `lobby:subscribe { gameType }` | C→S | 订阅指定游戏大厅 |
+| `room:join` / `room:updated` | C↔S | 房间生命周期 |
+| `game:start` | C→S | 开始 / 再来一局（达芬奇可带 useJoker/assistMode） |
+| `game:state` | S→C | 状态同步（`requiresPerPlayerState` 的游戏按玩家脱敏） |
 | `game:undercover:*` | C→S | 卧底描述/投票 |
-| `game:davinci:guess` | C→S | 达芬奇猜测对手暗牌 |
-| `game:davinci:decision` | C→S | 达芬奇猜中后继续/停止 |
+| `game:davinci:*` | C→S | 达芬奇猜测/决策/放置/setup |
 
-## 数据持久化策略
+## 测试
 
-- **持久化**：用户、房间元数据（含固定 `game_type`）、成员
-- **内存**：进行中的游戏状态（`RoomManager.games` Map）
-  - 适合实时对战，重启后需重新开局
-  - 后续可扩展写入 `game_sessions.state_json`
+```bash
+pnpm test          # 各游戏包 Vitest 单测
+pnpm test:e2e      # Playwright 全流程
+pnpm build && pnpm typecheck
+```
 
-## 鉴权
+## 扩展新游戏检查清单
 
-- REST：`Authorization: Bearer <JWT>`
-- Socket：握手 `auth.token`
-- JWT payload：`sub`（userId）、`username`
+1. `packages/shared`：`GameType` + `GAME_META`
+2. 复制 `packages/games/_template/` → `packages/games/<id>/`，实现 `logic.ts`、`module.ts`、`logic.test.ts`
+3. `packages/game-engine/src/registry.ts`：注册一行
+4. `apps/server/src/games/<id>/socket.ts` + `games/registry.ts`
+5. `apps/web/src/games/<id>/` 组件 + `games/registry.tsx`
+6. `pnpm test` 通过
 
-## 扩展新游戏
-
-1. 在 `shared` 添加 `GameType` 与 `GAME_META`
-2. 在 `game-engine` 实现 `createXxxGame` 与操作函数
-3. 在 `RoomManager` 注册创建与处理逻辑
-4. 在 `socket/index.ts` 添加事件处理
-5. 在 `web` 添加游戏 UI 组件，并在 `HomePage` / `GameLobbyPage` 自动展示
+**无需修改**：`RoomManager` 核心、`socket/index.ts` 主体、`RoomPage` 游戏渲染分支。

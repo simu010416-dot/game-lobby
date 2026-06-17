@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { UndercoverGameState } from '../../types/game';
+import type { UndercoverGameState } from '@game-lobby/game-engine';
 
 interface Props {
   state: UndercoverGameState;

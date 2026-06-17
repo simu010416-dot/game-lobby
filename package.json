@@ -8,6 +8,7 @@
     "dev:server": "pnpm --filter @game-lobby/server dev",
     "dev:web": "pnpm --filter @game-lobby/web dev",
     "build": "pnpm run -r build",
+    "test": "pnpm --filter \"@game-lobby/game-*\" test",
     "db:generate": "pnpm --filter @game-lobby/db generate",
     "db:migrate": "pnpm --filter @game-lobby/db migrate",
     "db:push": "pnpm --filter @game-lobby/db push",

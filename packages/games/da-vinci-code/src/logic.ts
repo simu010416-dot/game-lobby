@@ -1,5 +1,5 @@
 import type { AiDifficulty } from '@game-lobby/shared';
-import { pickRandom, shouldBotMakeMistake, shuffle } from '../../ai/utils.js';
+import { pickRandom, shouldBotMakeMistake, shuffle } from '@game-lobby/game-core';
 
 // `setup` is a Joker-mode-only opening phase where every player privately
 // arranges their starting rack at the same time. Because everyone goes through

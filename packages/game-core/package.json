@@ -1,5 +1,5 @@
 {
-  "name": "@game-lobby/game-engine",
+  "name": "@game-lobby/game-core",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./test/helpers": {
+      "types": "./dist/test/helpers.d.ts",
+      "import": "./dist/test/helpers.js"
     }
   },
   "scripts": {
@@ -16,9 +20,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@game-lobby/game-core": "workspace:*",
-    "@game-lobby/game-da-vinci-code": "workspace:*",
-    "@game-lobby/game-undercover": "workspace:*",
     "@game-lobby/shared": "workspace:*"
   },
   "devDependencies": {

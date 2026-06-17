@@ -1,0 +1,23 @@
+export {
+  createDaVinciGame,
+  submitDaVinciSetup,
+  guessDaVinciTile,
+  decideDaVinciContinue,
+  placeDaVinciJoker,
+  generateBotDaVinciMove,
+  generateBotDaVinciDecision,
+  generateBotDaVinciPlacement,
+  computeDaVinciCandidates,
+  jokerStillPossible,
+  redactDaVinciState,
+  tileKey,
+  JOKER_VALUE,
+  type DaVinciGameState,
+  type DaVinciPlayerState,
+  type DaVinciTile,
+  type DaVinciLastAction,
+  type DaVinciColor,
+  type DaVinciPhase,
+  type DaVinciStage,
+} from './logic.js';
+export { daVinciModule, type DaVinciStartOptions } from './module.js';

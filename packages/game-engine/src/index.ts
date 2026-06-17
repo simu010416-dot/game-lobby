@@ -1,58 +1,52 @@
 import type { GameType } from '@game-lobby/shared';
-import {
-  createUndercoverGame,
-  submitUndercoverDescription,
-  submitUndercoverVote,
-  generateBotDescription,
-  generateBotVote,
-  type UndercoverGameState,
-} from './games/undercover/logic.js';
-import { UNDERCOVER_WORD_PAIRS } from './games/undercover/words.js';
-import {
-  createDaVinciGame,
-  guessDaVinciTile,
-  decideDaVinciContinue,
-  placeDaVinciJoker,
-  submitDaVinciSetup,
-  generateBotDaVinciMove,
-  generateBotDaVinciDecision,
-  generateBotDaVinciPlacement,
-  computeDaVinciCandidates,
-  jokerStillPossible,
-  redactDaVinciState,
-  JOKER_VALUE,
-  type DaVinciGameState,
-} from './games/da-vinci-code/logic.js';
-import { pickRandom } from './ai/utils.js';
+import type { GameParticipant } from '@game-lobby/game-core';
+import type { UndercoverGameState } from '@game-lobby/game-undercover';
+import type { DaVinciGameState, DaVinciStartOptions } from '@game-lobby/game-da-vinci-code';
+import { getGameModule } from './registry.js';
 
 export type GameState = UndercoverGameState | DaVinciGameState;
 
-export interface GameParticipant {
-  id: string;
-  name: string;
-  isBot: boolean;
-}
+export type GameStartOptionsMap = {
+  undercover: Record<string, never>;
+  da_vinci_code: DaVinciStartOptions;
+};
 
-export interface GameOptions {
-  useJoker?: boolean;
-  assistMode?: boolean;
-}
+export type GameStartOptions<T extends GameType = GameType> = GameStartOptionsMap[T];
 
-export function createGame(
-  gameType: GameType,
+export function createGame<T extends GameType>(
+  gameType: T,
   participants: GameParticipant[],
-  options: GameOptions = {},
+  options: GameStartOptions<T> = {} as GameStartOptions<T>,
 ): GameState {
-  switch (gameType) {
-    case 'undercover':
-      return createUndercoverGame(participants, pickRandom(UNDERCOVER_WORD_PAIRS));
-    case 'da_vinci_code':
-      return createDaVinciGame(participants, {
-        useJoker: options.useJoker,
-        assistMode: options.assistMode,
-      });
-  }
+  const mod = getGameModule(gameType);
+  return mod.create(participants, options) as GameState;
 }
+
+export function isGameEnded(gameType: GameType, state: GameState): boolean {
+  return getGameModule(gameType).isEnded(state);
+}
+
+export function projectGameState(
+  gameType: GameType,
+  state: GameState,
+  viewerId: string | null,
+): GameState {
+  const mod = getGameModule(gameType);
+  if (mod.projectState) {
+    return mod.projectState(state, viewerId) as GameState;
+  }
+  return state;
+}
+
+export { gameRegistry, getGameModule } from './registry.js';
+
+export type { GameParticipant, GameModule, BotContext } from '@game-lobby/game-core';
+export {
+  pickRandom,
+  shuffle,
+  difficultyWeight,
+  shouldBotMakeMistake,
+} from '@game-lobby/game-core';
 
 export {
   createUndercoverGame,
@@ -60,18 +54,34 @@ export {
   submitUndercoverVote,
   generateBotDescription,
   generateBotVote,
+  undercoverModule,
   type UndercoverGameState,
+  type UndercoverPlayerState,
+  type UndercoverPhase,
+  type UndercoverStartOptions,
+} from '@game-lobby/game-undercover';
+
+export {
   createDaVinciGame,
+  submitDaVinciSetup,
   guessDaVinciTile,
   decideDaVinciContinue,
   placeDaVinciJoker,
-  submitDaVinciSetup,
   generateBotDaVinciMove,
   generateBotDaVinciDecision,
   generateBotDaVinciPlacement,
   computeDaVinciCandidates,
   jokerStillPossible,
   redactDaVinciState,
+  tileKey,
   JOKER_VALUE,
+  daVinciModule,
   type DaVinciGameState,
-};
+  type DaVinciPlayerState,
+  type DaVinciTile,
+  type DaVinciLastAction,
+  type DaVinciColor,
+  type DaVinciPhase,
+  type DaVinciStage,
+  type DaVinciStartOptions,
+} from '@game-lobby/game-da-vinci-code';

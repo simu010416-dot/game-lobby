@@ -6,10 +6,5 @@
     "rootDir": "./src"
   },
   "include": ["src/**/*"],
-  "references": [
-    { "path": "../shared" },
-    { "path": "../game-core" },
-    { "path": "../games/undercover" },
-    { "path": "../games/da-vinci-code" }
-  ]
+  "references": [{ "path": "../shared" }]
 }
