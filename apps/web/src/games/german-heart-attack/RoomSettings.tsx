@@ -1,13 +1,26 @@
+import { useEffect, useState } from 'react';
 import type { HeartAttackGameState } from '@game-lobby/game-engine';
 import type { RoomSettingsProps } from '../registry';
 
 export function HeartAttackRoomSettings({
   isHost,
   isPlaying,
+  isIntermission,
   gameState,
-  useSpecialCards,
-  setUseSpecialCards,
+  onStartOptionsChange,
 }: RoomSettingsProps) {
+  const [useSpecialCards, setUseSpecialCards] = useState(false);
+
+  useEffect(() => {
+    onStartOptionsChange({ useSpecialCards });
+  }, [useSpecialCards, onStartOptionsChange]);
+
+  useEffect(() => {
+    if (!isIntermission || !gameState) return;
+    const s = gameState as HeartAttackGameState;
+    setUseSpecialCards(s.useSpecialCards);
+  }, [gameState, isIntermission]);
+
   if (!isHost && !(isPlaying && gameState)) return null;
 
   if (!isHost && isPlaying && gameState) {

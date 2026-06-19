@@ -3,8 +3,11 @@ import { v4 as uuid } from 'uuid';
 import { rooms, roomMembers, type Database } from '@game-lobby/db';
 import type { AiDifficulty, GameType, RoomDetail, RoomPlayer, RoomSummary } from '@game-lobby/shared';
 import { GAME_META } from '@game-lobby/shared';
+import type { RoomStatus } from '@game-lobby/shared';
 import {
   createGame,
+  defaultCanAddBot,
+  defaultResolveJoinRole,
   getGameModule,
   type GameStartOptions,
   type GameState,
@@ -200,11 +203,16 @@ export class RoomManager {
     kickedSockets: { socketId: string; roomId: string }[];
   } | null> {
     return this.runExclusive(`room:${roomId}`, async () => {
-      const [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId));
+      let [room] = await this.db.select().from(rooms).where(eq(rooms.id, roomId));
       if (!room) return null;
 
       this.cancelScheduledClose(roomId);
       this.touchRoom(roomId);
+
+      if (room.status === 'playing' && !this.games.has(roomId)) {
+        await this.db.update(rooms).set({ status: 'waiting' }).where(eq(rooms.id, roomId));
+        room = { ...room, status: 'waiting' };
+      }
 
       const { leftRooms, kickedSockets } = await this.removeUserFromOtherRooms(user.id, roomId);
 
@@ -224,7 +232,15 @@ export class RoomManager {
           .set({ isOnline: true, displayName: user.displayName })
           .where(eq(roomMembers.id, memberId));
       } else {
-        const joinRole = room.status === 'playing' ? 'spectator' : 'player';
+        const members = await this.getMembers(roomId);
+        const activeCount = members.filter((m) => m.role !== 'spectator').length;
+        const mod = getGameModule(room.gameType as GameType);
+        const resolveJoinRole = mod.resolveJoinRole ?? defaultResolveJoinRole;
+        const joinRole = resolveJoinRole({
+          roomStatus: room.status as RoomStatus,
+          activePlayerCount: activeCount,
+          maxPlayers: room.maxPlayers,
+        });
         const [created] = await this.db
           .insert(roomMembers)
           .values({
@@ -397,10 +413,18 @@ export class RoomManager {
   ): Promise<RoomDetail | { error: string } | null> {
     const detail = await this.getRoomDetail(roomId);
     const hostMember = detail?.players.find((p) => p.role === 'host');
-    if (!detail || hostMember?.id !== requesterId) return null;
+    if (!detail) return null;
+    if (hostMember?.id !== requesterId) {
+      return { error: '仅房主可添加电脑' };
+    }
 
     const waiting = await this.assertWaitingRoom(roomId);
     if (!waiting.ok) return { error: waiting.message };
+
+    const mod = getGameModule(detail.gameType);
+    const canAdd = mod.canAddBot ?? defaultCanAddBot;
+    const check = canAdd(detail);
+    if (check !== true) return { error: check.message };
 
     const botName = `电脑-${difficulty}-${Math.floor(Math.random() * 1000)}`;
     await this.db.insert(roomMembers).values({

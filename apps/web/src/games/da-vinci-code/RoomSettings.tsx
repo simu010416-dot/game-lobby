@@ -1,15 +1,28 @@
+import { useEffect, useState } from 'react';
 import type { DaVinciGameState } from '@game-lobby/game-engine';
 import type { RoomSettingsProps } from '../registry';
 
 export function DaVinciRoomSettings({
   isHost,
   isPlaying,
+  isIntermission,
   gameState,
-  useJoker,
-  setUseJoker,
-  assistMode,
-  setAssistMode,
+  onStartOptionsChange,
 }: RoomSettingsProps) {
+  const [useJoker, setUseJoker] = useState(false);
+  const [assistMode, setAssistMode] = useState(true);
+
+  useEffect(() => {
+    onStartOptionsChange({ useJoker, assistMode });
+  }, [useJoker, assistMode, onStartOptionsChange]);
+
+  useEffect(() => {
+    if (!isIntermission || !gameState) return;
+    const s = gameState as DaVinciGameState;
+    setUseJoker(s.useJoker);
+    setAssistMode(s.assistMode ?? true);
+  }, [gameState, isIntermission]);
+
   if (!isHost && !(isPlaying && gameState)) return null;
 
   if (!isHost && isPlaying && gameState) {

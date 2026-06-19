@@ -2,6 +2,7 @@ import type { ComponentType, ReactNode } from 'react';
 import type { GameType } from '@game-lobby/shared';
 import { isGameEnded } from '@game-lobby/game-engine';
 import type { GameState } from '@game-lobby/game-engine';
+import type { GameStartOptionsPayload } from '../lib/start-game-options';
 import { UndercoverGame } from './undercover/UndercoverGame';
 import {
   emitUndercoverSpeech,
@@ -50,7 +51,8 @@ import {
   emitWolfVote,
 } from './werewolf/socket';
 import { WerewolfRoomSettings } from './werewolf/RoomSettings';
-import type { RolePresetId, WerewolfRole } from '@game-lobby/game-engine';
+import { GomokuGame } from './gomoku/GomokuGame';
+import { emitGomokuPlace } from './gomoku/socket';
 
 export interface GameComponentProps {
   state: GameState;
@@ -64,25 +66,9 @@ export interface GameComponentProps {
 export interface RoomSettingsProps {
   isHost: boolean;
   isPlaying: boolean;
+  isIntermission: boolean;
   gameState: GameState | null;
-  useJoker: boolean;
-  setUseJoker: (v: boolean) => void;
-  assistMode: boolean;
-  setAssistMode: (v: boolean) => void;
-  categoryIds: string[];
-  setCategoryIds: (v: string[]) => void;
-  userPackIds: string[];
-  setUserPackIds: (v: string[]) => void;
-  roomExtraWords: string;
-  setRoomExtraWords: (v: string) => void;
-  useSpecialCards: boolean;
-  setUseSpecialCards: (v: boolean) => void;
-  werewolfRolePreset: RolePresetId;
-  setWerewolfRolePreset: (v: RolePresetId) => void;
-  werewolfCustomRoles: WerewolfRole[];
-  setWerewolfCustomRoles: (v: WerewolfRole[]) => void;
-  werewolfDiscussionMode: 'free' | 'sequential';
-  setWerewolfDiscussionMode: (v: 'free' | 'sequential') => void;
+  onStartOptionsChange: (options: Partial<GameStartOptionsPayload>) => void;
 }
 
 export interface WebGameModule {
@@ -179,6 +165,17 @@ function WerewolfGameWrapper({ state, myMemberId, isSpectator }: GameComponentPr
   );
 }
 
+function GomokuGameWrapper({ state, myMemberId, isSpectator }: GameComponentProps) {
+  return (
+    <GomokuGame
+      state={state as import('@game-lobby/game-engine').GomokuGameState}
+      myMemberId={myMemberId}
+      isSpectator={isSpectator}
+      onPlace={emitGomokuPlace}
+    />
+  );
+}
+
 export const GAME_REGISTRY: Record<GameType, WebGameModule> = {
   undercover: {
     Component: UndercoverGameWrapper,
@@ -204,6 +201,10 @@ export const GAME_REGISTRY: Record<GameType, WebGameModule> = {
     Component: WerewolfGameWrapper,
     RoomSettings: WerewolfRoomSettings,
     isEnded: (state) => isGameEnded('werewolf', state as GameState),
+  },
+  gomoku: {
+    Component: GomokuGameWrapper,
+    isEnded: (state) => isGameEnded('gomoku', state as GameState),
   },
 };
 

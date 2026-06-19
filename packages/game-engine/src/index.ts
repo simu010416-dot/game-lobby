@@ -5,6 +5,7 @@ import type { DaVinciGameState, DaVinciStartOptions } from '@game-lobby/game-da-
 import type { DrawGuessGameState, DrawGuessStartOptions } from '@game-lobby/game-draw-guess';
 import type { HeartAttackGameState, HeartAttackStartOptions } from '@game-lobby/game-german-heart-attack';
 import type { WerewolfGameState, WerewolfStartOptions } from '@game-lobby/game-werewolf';
+import type { GomokuGameState, GomokuStartOptions } from '@game-lobby/game-gomoku';
 import { getGameModule } from './registry.js';
 
 export type GameState =
@@ -12,7 +13,8 @@ export type GameState =
   | DaVinciGameState
   | DrawGuessGameState
   | HeartAttackGameState
-  | WerewolfGameState;
+  | WerewolfGameState
+  | GomokuGameState;
 
 export type GameStartOptionsMap = {
   undercover: UndercoverStartOptions;
@@ -20,6 +22,7 @@ export type GameStartOptionsMap = {
   draw_guess: DrawGuessStartOptions;
   german_heart_attack: HeartAttackStartOptions;
   werewolf: WerewolfStartOptions;
+  gomoku: GomokuStartOptions;
 };
 
 export type GameStartOptions<T extends GameType = GameType> = GameStartOptionsMap[T];
@@ -51,12 +54,14 @@ export function projectGameState(
 
 export { gameRegistry, getGameModule } from './registry.js';
 
-export type { GameParticipant, GameModule, BotContext } from '@game-lobby/game-core';
+export type { GameParticipant, GameModule, BotContext, CanAddBotResult, JoinRoleContext } from '@game-lobby/game-core';
 export {
   pickRandom,
   shuffle,
   difficultyWeight,
   shouldBotMakeMistake,
+  defaultCanAddBot,
+  defaultResolveJoinRole,
 } from '@game-lobby/game-core';
 
 export {
@@ -190,3 +195,21 @@ export {
   type DiscussionMode,
   type WitchActionType,
 } from '@game-lobby/game-werewolf';
+
+export {
+  createGomokuGame,
+  placeGomokuStone,
+  generateBotGomokuMove,
+  checkWin,
+  createEmptyBoard,
+  GOMOKU_BOARD_SIZE,
+  gomokuModule,
+  type GomokuGameState,
+  type GomokuPlayerState,
+  type GomokuLastMove,
+  type GomokuCoord,
+  type GomokuStone,
+  type GomokuCell,
+  type GomokuPhase,
+  type GomokuStartOptions,
+} from '@game-lobby/game-gomoku';

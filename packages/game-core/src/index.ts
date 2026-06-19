@@ -1,4 +1,5 @@
-export type { BotContext, GameModule, GameParticipant } from './types.js';
+export type { BotContext, GameModule, GameParticipant, CanAddBotResult, JoinRoleContext } from './types.js';
+export { defaultCanAddBot, defaultResolveJoinRole } from './room-policy.js';
 export {
   pickRandom,
   shuffle,

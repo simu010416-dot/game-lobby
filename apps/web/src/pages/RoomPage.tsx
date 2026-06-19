@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import type { RoomDetail } from '@game-lobby/shared';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import type { UndercoverGameState } from '@game-lobby/game-engine';
 import {
   ALL_AI_DIFFICULTIES,
   AI_DIFFICULTY_LABELS,
@@ -8,57 +8,35 @@ import {
   type AiDifficulty,
   type GameType,
 } from '@game-lobby/shared';
-import type { DaVinciGameState, HeartAttackGameState, UndercoverGameState } from '@game-lobby/game-engine';
 import { useAuth } from '../context/AuthContext';
-import * as api from '../lib/api';
 import {
   closeRoom,
   emitAddBot,
   emitSetRoles,
   emitStartGame,
-  getSocket,
-  joinRoom,
-  leaveRoom,
-  onGameState,
-  onRoomClosed,
-  onRoomKicked,
-  onRoomUpdated,
 } from '../lib/socket';
+import type { GameStartOptionsPayload } from '../lib/start-game-options';
+import { useRoomSession } from '../hooks/useRoomSession';
 import { GAME_REGISTRY, renderGameSettings } from '../games/registry';
-import { defaultCustomRoles } from '../games/werewolf/RoomSettings';
-import type { RolePresetId, WerewolfRole } from '@game-lobby/game-engine';
 
 export function RoomPage() {
   const { gameType: gameTypeParam, roomId } = useParams<{ gameType: string; roomId: string }>();
-  const navigate = useNavigate();
   const gameTypeFromUrl = gameTypeParam as GameType;
   const lobbyPath = `/games/${gameTypeFromUrl}`;
   const { token, user } = useAuth();
-  const [room, setRoom] = useState<RoomDetail | null>(null);
-  const [closed, setClosed] = useState(false);
-  const [closedMessage, setClosedMessage] = useState('房间已关闭，正在返回大厅…');
-  const [kicked, setKicked] = useState(false);
-  const [gameType, setGameType] = useState<GameType | null>(null);
-  const [gameState, setGameState] = useState<unknown>(null);
-  const [error, setError] = useState('');
   const [botDifficulty, setBotDifficulty] = useState<AiDifficulty>('medium');
-  const [useJoker, setUseJoker] = useState(false);
-  const [assistMode, setAssistMode] = useState(true);
-  const [useSpecialCards, setUseSpecialCards] = useState(false);
-  const [categoryIds, setCategoryIds] = useState<string[]>(() =>
-    gameTypeFromUrl === 'undercover'
-      ? ['food', 'sport', 'entertainment', 'transport', 'life', 'animal', 'nature', 'jobs', 'places', 'daily']
-      : ['animal', 'daily', 'movie', 'sport'],
-  );
-  const [userPackIds, setUserPackIds] = useState<string[]>([]);
-  const [roomExtraWords, setRoomExtraWords] = useState('');
-  const [werewolfRolePreset, setWerewolfRolePreset] = useState<RolePresetId>('simple_6');
-  const [werewolfCustomRoles, setWerewolfCustomRoles] = useState<WerewolfRole[]>(() =>
-    defaultCustomRoles(),
-  );
-  const [werewolfDiscussionMode, setWerewolfDiscussionMode] = useState<'free' | 'sequential'>(
-    'sequential',
-  );
+  const [startOptions, setStartOptions] = useState<Partial<GameStartOptionsPayload>>({});
+
+  const { room, error, setError, kicked, closed, closedMessage, gameType, gameState } =
+    useRoomSession({ roomId, token, lobbyPath });
+
+  useEffect(() => {
+    setStartOptions({});
+  }, [roomId]);
+
+  const handleStartOptionsChange = useCallback((options: Partial<GameStartOptionsPayload>) => {
+    setStartOptions((prev) => ({ ...prev, ...options }));
+  }, []);
 
   const activeGameMod = gameType ? GAME_REGISTRY[gameType] : null;
   const isGameEnded = (state: unknown) =>
@@ -81,89 +59,17 @@ export function RoomPage() {
     gameState != null && (isGameEnded(gameState) || isUndercoverFinalReveal);
   const isIntermission = room?.status === 'waiting' && gameState != null && isGameFinished;
   const isPreGame = room?.status === 'waiting' && !isIntermission;
-  const showSidePanels = isPreGame || isIntermission;
-
-  useEffect(() => {
-    if (!token || !roomId) return;
-    getSocket(token);
-
-    let mounted = true;
-    (async () => {
-      const res = await joinRoom(roomId);
-      if (!mounted) return;
-      if (!res.ok) {
-        setError(res.message ?? '加入房间失败');
-        return;
-      }
-      if (res.room) setRoom(res.room);
-    })();
-
-    const unsubRoom = onRoomUpdated((r) => {
-      if (r.id === roomId) setRoom(r);
-    });
-    const unsubGame = onGameState((payload) => {
-      setGameType(payload.gameType as GameType);
-      setGameState(payload.state);
-    });
-    const unsubClosed = onRoomClosed((payload) => {
-      if (payload.roomId === roomId) {
-        if (payload.message) setClosedMessage(`${payload.message}，正在返回大厅…`);
-        setClosed(true);
-        navigate(lobbyPath, { replace: true });
-      }
-    });
-    const unsubKicked = onRoomKicked((payload) => {
-      if (payload.roomId === roomId) {
-        setKicked(true);
-        navigate(lobbyPath, { replace: true });
-      }
-    });
-
-    return () => {
-      mounted = false;
-      leaveRoom();
-      unsubRoom();
-      unsubGame();
-      unsubClosed();
-      unsubKicked();
-    };
-  }, [token, roomId, lobbyPath, navigate]);
-
-  useEffect(() => {
-    if (!token || !roomId) return;
-    api.fetchRoom(token, roomId).then(setRoom).catch(() => {});
-  }, [token, roomId]);
-
-  useEffect(() => {
-    if (gameType !== 'da_vinci_code' || !gameState || !isGameEnded(gameState)) return;
-    const s = gameState as DaVinciGameState;
-    setUseJoker(s.useJoker);
-    setAssistMode(s.assistMode ?? true);
-  }, [gameState, gameType]);
-
-  useEffect(() => {
-    if (gameType !== 'german_heart_attack' || !gameState || !isGameEnded(gameState)) return;
-    const s = gameState as HeartAttackGameState;
-    setUseSpecialCards(s.useSpecialCards);
-  }, [gameState, gameType]);
+  const orphanedPlaying = room?.status === 'playing' && gameState == null;
+  const showSidePanels = isPreGame || isIntermission || orphanedPlaying;
 
   async function handleAddBot() {
-    await emitAddBot(botDifficulty);
+    const res = await emitAddBot(botDifficulty);
+    if (!res.ok) setError(res.message ?? '无法添加电脑');
   }
 
   async function handleStartGame() {
     if (!room) return;
-    const res = await emitStartGame(room.gameType, {
-      useJoker,
-      assistMode,
-      useSpecialCards,
-      categoryIds,
-      userPackIds,
-      roomExtraWords,
-      rolePreset: werewolfRolePreset,
-      customRoles: werewolfCustomRoles,
-      discussionMode: werewolfDiscussionMode,
-    });
+    const res = await emitStartGame(room.gameType, startOptions);
     if (!res.ok) setError(res.message ?? '无法开始');
   }
 
@@ -215,6 +121,9 @@ export function RoomPage() {
   const playerListPanel = (
     <section className="card">
       <h3 style={{ marginTop: 0 }}>玩家列表</h3>
+      <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem', margin: '0 0 0.75rem' }}>
+        同一时间只能待在一个房间；加入新房间会自动离开旧房间。
+      </p>
       <div style={{ display: 'grid', gap: '0.5rem' }}>
         {room.players.map((p) => (
           <div
@@ -278,28 +187,18 @@ export function RoomPage() {
         </p>
       )}
 
+      {orphanedPlaying && isHost && (
+        <p style={{ color: 'var(--warning)', fontSize: '0.85rem', marginTop: 0 }}>
+          房间状态异常（无进行中的对局），请重新点击「开始游戏」。
+        </p>
+      )}
+
       {renderGameSettings(room.gameType, {
         isHost,
         isPlaying,
+        isIntermission,
         gameState: gameState as import('@game-lobby/game-engine').GameState | null,
-        useJoker,
-        setUseJoker,
-        assistMode,
-        setAssistMode,
-        categoryIds,
-        setCategoryIds,
-        userPackIds,
-        setUserPackIds,
-        roomExtraWords,
-        setRoomExtraWords,
-        useSpecialCards,
-        setUseSpecialCards,
-        werewolfRolePreset,
-        setWerewolfRolePreset,
-        werewolfCustomRoles,
-        setWerewolfCustomRoles,
-        werewolfDiscussionMode,
-        setWerewolfDiscussionMode,
+        onStartOptionsChange: handleStartOptionsChange,
       })}
 
       {isHost && (

@@ -3,19 +3,34 @@ import type { RoomSettingsProps } from '../registry';
 import { useAuth } from '../../context/AuthContext';
 import * as api from '../../lib/api';
 
+const DEFAULT_CATEGORY_IDS = [
+  'food',
+  'sport',
+  'entertainment',
+  'transport',
+  'life',
+  'animal',
+  'nature',
+  'jobs',
+  'places',
+  'daily',
+];
+
 export function UndercoverRoomSettings({
   isHost,
   isPlaying,
-  categoryIds,
-  setCategoryIds,
-  userPackIds,
-  setUserPackIds,
-  roomExtraWords,
-  setRoomExtraWords,
+  onStartOptionsChange,
 }: RoomSettingsProps) {
   const { token } = useAuth();
   const [categories, setCategories] = useState<api.PairPackCategory[]>([]);
   const [userPacks, setUserPacks] = useState<api.UserPairPack[]>([]);
+  const [categoryIds, setCategoryIds] = useState<string[]>(() => [...DEFAULT_CATEGORY_IDS]);
+  const [userPackIds, setUserPackIds] = useState<string[]>([]);
+  const [roomExtraWords, setRoomExtraWords] = useState('');
+
+  useEffect(() => {
+    onStartOptionsChange({ categoryIds, userPackIds, roomExtraWords });
+  }, [categoryIds, userPackIds, roomExtraWords, onStartOptionsChange]);
 
   useEffect(() => {
     if (!token) return;

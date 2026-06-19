@@ -1,5 +1,5 @@
 {
-  "name": "@game-lobby/game-engine",
+  "name": "@game-lobby/game-gomoku",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -13,19 +13,16 @@
   },
   "scripts": {
     "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@game-lobby/game-core": "workspace:*",
-    "@game-lobby/game-da-vinci-code": "workspace:*",
-    "@game-lobby/game-draw-guess": "workspace:*",
-    "@game-lobby/game-german-heart-attack": "workspace:*",
-    "@game-lobby/game-gomoku": "workspace:*",
-    "@game-lobby/game-werewolf": "workspace:*",
-    "@game-lobby/game-undercover": "workspace:*",
     "@game-lobby/shared": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^3.0.5"
   }
 }

@@ -3,7 +3,8 @@ export type GameType =
   | 'da_vinci_code'
   | 'draw_guess'
   | 'german_heart_attack'
-  | 'werewolf';
+  | 'werewolf'
+  | 'gomoku';
 
 export type AiDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
 
@@ -113,6 +114,14 @@ export const GAME_META: Record<GameType, GameMetaEntry> = {
     botsAllowed: true,
     requiresPerPlayerState: true,
   },
+  gomoku: {
+    name: '五子棋',
+    minPlayers: 2,
+    maxPlayers: 2,
+    description: '黑白轮流落子，先在棋盘上连成五子者获胜。',
+    botsAllowed: true,
+    requiresPerPlayerState: false,
+  },
 };
 
 export const AI_DIFFICULTY_LABELS: Record<AiDifficulty, string> = {
@@ -128,6 +137,7 @@ export const ALL_GAME_TYPES: GameType[] = [
   'draw_guess',
   'german_heart_attack',
   'werewolf',
+  'gomoku',
 ];
 
 /** Tuple for Zod `z.enum()` — single source with ALL_GAME_TYPES */

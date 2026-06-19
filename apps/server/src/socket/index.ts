@@ -205,7 +205,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       const member = await findMember(roomManager, roomId, user.id);
       const detail = await roomManager.addBot(roomId, parsed.data.difficulty as AiDifficulty, member?.id ?? '');
       if (!detail) {
-        cb?.({ ok: false });
+        cb?.({ ok: false, message: '无法添加电脑' });
         return;
       }
       if ('error' in detail) {

@@ -17,6 +17,32 @@ import { startPairPackSyncScheduler } from './services/word-pair-service.js';
 
 const PORT = Number(process.env.PORT ?? 3001);
 const CORS_ORIGIN = process.env.CORS_ORIGIN ?? 'http://localhost:5273';
+const CORS_ORIGINS = CORS_ORIGIN.split(',').map((o) => o.trim());
+const corsOriginCheck = (
+  origin: string | undefined,
+  callback: (err: Error | null, allow?: boolean) => void,
+) => {
+  if (!origin || CORS_ORIGINS.includes(origin)) {
+    callback(null, true);
+    return;
+  }
+  // Dev convenience: allow 127.0.0.1 when localhost is configured and vice versa
+  if (
+    CORS_ORIGINS.some((o) => o.includes('localhost')) &&
+    origin.startsWith('http://127.0.0.1:')
+  ) {
+    callback(null, true);
+    return;
+  }
+  if (
+    CORS_ORIGINS.some((o) => o.includes('127.0.0.1')) &&
+    origin.startsWith('http://localhost:')
+  ) {
+    callback(null, true);
+    return;
+  }
+  callback(null, false);
+};
 const DATABASE_URL =
   process.env.DATABASE_URL ?? 'postgresql://postgres:postgres@localhost:5432/game_lobby';
 
@@ -26,7 +52,7 @@ const { db, pool } = usePglite ? await createPgliteDb() : createDb(DATABASE_URL)
 const roomManager = new RoomManager(db);
 
 const app = express();
-app.use(cors({ origin: CORS_ORIGIN, credentials: true }));
+app.use(cors({ origin: corsOriginCheck, credentials: true }));
 app.use(express.json());
 
 app.get('/health', (_req, res) => {
@@ -40,7 +66,7 @@ app.use('/api/word-pairs', authMiddleware, wordPairsRouter(db));
 
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
-  cors: { origin: CORS_ORIGIN, credentials: true },
+  cors: { origin: corsOriginCheck, credentials: true },
 });
 
 setupSocketHandlers(io, db, roomManager);

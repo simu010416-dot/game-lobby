@@ -2,7 +2,13 @@ import { io, type Socket } from 'socket.io-client';
 import type { GameType, RoomDetail, RoomSummary } from '@game-lobby/shared';
 import type { RolePresetId, WerewolfRole } from '@game-lobby/game-engine';
 
-const WS_URL = import.meta.env.VITE_WS_URL ?? 'http://localhost:3001';
+/** Same-origin in dev (via Vite proxy) avoids localhost vs 127.0.0.1 CORS mismatches. */
+function resolveWsUrl(): string {
+  const envUrl = import.meta.env.VITE_WS_URL as string | undefined;
+  if (envUrl !== undefined && envUrl !== '') return envUrl;
+  if (typeof window !== 'undefined') return window.location.origin;
+  return 'http://localhost:3001';
+}
 
 let socket: Socket | null = null;
 
@@ -12,10 +18,13 @@ export function getSocket(token: string): Socket {
     socket = null;
   }
   if (!socket) {
-    socket = io(WS_URL, {
+    socket = io(resolveWsUrl(), {
       auth: { token },
       autoConnect: true,
     });
+  } else {
+    (socket.auth as { token: string }).token = token;
+    if (!socket.connected) socket.connect();
   }
   return socket;
 }
@@ -68,7 +77,7 @@ export function closeRoom() {
 }
 
 export function emitAddBot(difficulty: string) {
-  return new Promise<{ ok: boolean }>((resolve) => {
+  return new Promise<{ ok: boolean; room?: RoomDetail; message?: string }>((resolve) => {
     socket?.emit('room:add-bot', { difficulty }, resolve);
   });
 }
