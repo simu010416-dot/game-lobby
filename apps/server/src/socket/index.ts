@@ -8,6 +8,7 @@ import type { AiDifficulty, GameType } from '@game-lobby/shared';
 import { ALL_GAME_TYPES, GAME_META, GAME_TYPE_ZOD_VALUES } from '@game-lobby/shared';
 import { registerAllGameSockets } from '../games/registry.js';
 import { startDrawGuessTimer } from '../games/draw-guess/socket.js';
+import { startGoTimer } from '../games/go/socket.js';
 import { resolveWordPool } from '../services/word-pack-service.js';
 import { resolvePairPool } from '../services/word-pair-service.js';
 import { parsePairLines } from '@game-lobby/word-pairs';
@@ -40,6 +41,11 @@ const startGameSchema = z
       )
       .optional(),
     discussionMode: z.enum(['free', 'sequential']).optional(),
+    boardSize: z.union([z.literal(9), z.literal(13), z.literal(19)]).optional(),
+    handicap: z.number().int().min(0).max(9).optional(),
+    mainTimeSec: z.number().int().min(60).max(3600).optional(),
+    byoyomiSec: z.number().int().min(5).max(120).optional(),
+    byoyomiPeriods: z.number().int().min(0).max(10).optional(),
   })
   .optional();
 
@@ -328,6 +334,15 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
           customRoles: data?.customRoles,
           discussionMode: data?.discussionMode ?? 'sequential',
         };
+      } else if (gameType === 'go') {
+        const data = parsedStart.success ? parsedStart.data : undefined;
+        startOptions = {
+          boardSize: data?.boardSize ?? 19,
+          handicap: data?.handicap ?? 0,
+          mainTimeSec: data?.mainTimeSec ?? 600,
+          byoyomiSec: data?.byoyomiSec ?? 30,
+          byoyomiPeriods: data?.byoyomiPeriods ?? 3,
+        };
       }
 
       const result = await roomManager.startNextGame(roomId, hostMember.id, startOptions);
@@ -361,6 +376,12 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
   });
 
   startDrawGuessTimer(
+    io,
+    roomManager,
+    (roomId) => emitGameState(io, roomManager, roomId),
+    (roomId, state) => emitRoomIfGameEnded(io, roomManager, roomId, state),
+  );
+  startGoTimer(
     io,
     roomManager,
     (roomId) => emitGameState(io, roomManager, roomId),

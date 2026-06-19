@@ -14,6 +14,7 @@
     { "path": "../games/draw-guess" },
     { "path": "../games/german-heart-attack" },
     { "path": "../games/gomoku" },
+    { "path": "../games/go" },
     { "path": "../games/werewolf" }
   ]
 }

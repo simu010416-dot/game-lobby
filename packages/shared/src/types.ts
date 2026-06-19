@@ -4,7 +4,8 @@ export type GameType =
   | 'draw_guess'
   | 'german_heart_attack'
   | 'werewolf'
-  | 'gomoku';
+  | 'gomoku'
+  | 'go';
 
 export type AiDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
 
@@ -122,6 +123,14 @@ export const GAME_META: Record<GameType, GameMetaEntry> = {
     botsAllowed: true,
     requiresPerPlayerState: false,
   },
+  go: {
+    name: '围棋',
+    minPlayers: 2,
+    maxPlayers: 2,
+    description: '双人对弈，中国规则数子法，支持让子与读秒。',
+    botsAllowed: true,
+    requiresPerPlayerState: false,
+  },
 };
 
 export const AI_DIFFICULTY_LABELS: Record<AiDifficulty, string> = {
@@ -138,6 +147,7 @@ export const ALL_GAME_TYPES: GameType[] = [
   'german_heart_attack',
   'werewolf',
   'gomoku',
+  'go',
 ];
 
 /** Tuple for Zod `z.enum()` — single source with ALL_GAME_TYPES */

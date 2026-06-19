@@ -14,4 +14,9 @@ export type GameStartOptionsPayload = {
   rolePreset?: RolePresetId;
   customRoles?: WerewolfRole[];
   discussionMode?: 'free' | 'sequential';
+  boardSize?: 9 | 13 | 19;
+  handicap?: number;
+  mainTimeSec?: number;
+  byoyomiSec?: number;
+  byoyomiPeriods?: number;
 };

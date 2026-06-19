@@ -6,6 +6,7 @@ import type { DrawGuessGameState, DrawGuessStartOptions } from '@game-lobby/game
 import type { HeartAttackGameState, HeartAttackStartOptions } from '@game-lobby/game-german-heart-attack';
 import type { WerewolfGameState, WerewolfStartOptions } from '@game-lobby/game-werewolf';
 import type { GomokuGameState, GomokuStartOptions } from '@game-lobby/game-gomoku';
+import type { GoGameState, GoStartOptions } from '@game-lobby/game-go';
 import { getGameModule } from './registry.js';
 
 export type GameState =
@@ -14,7 +15,8 @@ export type GameState =
   | DrawGuessGameState
   | HeartAttackGameState
   | WerewolfGameState
-  | GomokuGameState;
+  | GomokuGameState
+  | GoGameState;
 
 export type GameStartOptionsMap = {
   undercover: UndercoverStartOptions;
@@ -23,6 +25,7 @@ export type GameStartOptionsMap = {
   german_heart_attack: HeartAttackStartOptions;
   werewolf: WerewolfStartOptions;
   gomoku: GomokuStartOptions;
+  go: GoStartOptions;
 };
 
 export type GameStartOptions<T extends GameType = GameType> = GameStartOptionsMap[T];
@@ -213,3 +216,28 @@ export {
   type GomokuPhase,
   type GomokuStartOptions,
 } from '@game-lobby/game-gomoku';
+
+export {
+  createGoGame,
+  playGoStone,
+  passGoTurn,
+  resignGoGame,
+  getCurrentPlayerId,
+  getLegalMoves,
+  tickGoGame,
+  scoreChinese,
+  getHandicapPoints,
+  getStarPoints,
+  defaultKomi,
+  applyBotGoMove,
+  generateBotGoMove,
+  goModule,
+  type GoGameState,
+  type GoPlayerState,
+  type GoBoardSize,
+  type GoColor,
+  type GoPhase,
+  type GoTimeSettings,
+  type GoStartOptions,
+  type BotGoAction,
+} from '@game-lobby/game-go';

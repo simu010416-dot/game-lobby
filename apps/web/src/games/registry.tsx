@@ -53,6 +53,9 @@ import {
 import { WerewolfRoomSettings } from './werewolf/RoomSettings';
 import { GomokuGame } from './gomoku/GomokuGame';
 import { emitGomokuPlace } from './gomoku/socket';
+import { GoGame } from './go/GoGame';
+import { emitGoPass, emitGoPlay, emitGoResign } from './go/socket';
+import { GoRoomSettings } from './go/RoomSettings';
 
 export interface GameComponentProps {
   state: GameState;
@@ -176,6 +179,19 @@ function GomokuGameWrapper({ state, myMemberId, isSpectator }: GameComponentProp
   );
 }
 
+function GoGameWrapper({ state, myMemberId, isSpectator }: GameComponentProps) {
+  return (
+    <GoGame
+      state={state as import('@game-lobby/game-engine').GoGameState}
+      myMemberId={myMemberId}
+      isSpectator={isSpectator}
+      onPlay={emitGoPlay}
+      onPass={emitGoPass}
+      onResign={emitGoResign}
+    />
+  );
+}
+
 export const GAME_REGISTRY: Record<GameType, WebGameModule> = {
   undercover: {
     Component: UndercoverGameWrapper,
@@ -205,6 +221,11 @@ export const GAME_REGISTRY: Record<GameType, WebGameModule> = {
   gomoku: {
     Component: GomokuGameWrapper,
     isEnded: (state) => isGameEnded('gomoku', state as GameState),
+  },
+  go: {
+    Component: GoGameWrapper,
+    RoomSettings: GoRoomSettings,
+    isEnded: (state) => isGameEnded('go', state as GameState),
   },
 };
 

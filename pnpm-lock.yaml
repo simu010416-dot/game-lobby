@@ -180,6 +180,9 @@ importers:
       '@game-lobby/game-german-heart-attack':
         specifier: workspace:*
         version: link:../games/german-heart-attack
+      '@game-lobby/game-go':
+        specifier: workspace:*
+        version: link:../games/go
       '@game-lobby/game-gomoku':
         specifier: workspace:*
         version: link:../games/gomoku
@@ -230,6 +233,22 @@ importers:
         version: 3.2.6(@types/node@22.19.21)(tsx@4.22.4)
 
   packages/games/german-heart-attack:
+    dependencies:
+      '@game-lobby/game-core':
+        specifier: workspace:*
+        version: link:../../game-core
+      '@game-lobby/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.6(@types/node@22.19.21)(tsx@4.22.4)
+
+  packages/games/go:
     dependencies:
       '@game-lobby/game-core':
         specifier: workspace:*
