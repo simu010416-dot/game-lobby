@@ -12,6 +12,7 @@ import { useAuth } from '../context/AuthContext';
 import {
   closeRoom,
   emitAddBot,
+  emitRemoveMember,
   emitSetRoles,
   emitStartGame,
 } from '../lib/socket';
@@ -27,7 +28,7 @@ export function RoomPage() {
   const [botDifficulty, setBotDifficulty] = useState<AiDifficulty>('medium');
   const [startOptions, setStartOptions] = useState<Partial<GameStartOptionsPayload>>({});
 
-  const { room, error, setError, kicked, closed, closedMessage, gameType, gameState } =
+  const { room, error, setError, kicked, kickedMessage, closed, closedMessage, gameType, gameState } =
     useRoomSession({ roomId, token, lobbyPath });
 
   useEffect(() => {
@@ -67,6 +68,12 @@ export function RoomPage() {
     if (!res.ok) setError(res.message ?? '无法添加电脑');
   }
 
+  async function handleRemoveMember(memberId: string, displayName: string, isBot: boolean) {
+    if (!isBot && !window.confirm(`确定将 ${displayName} 移出房间吗？`)) return;
+    const res = await emitRemoveMember(memberId);
+    if (!res.ok) setError(res.message ?? '无法移除成员');
+  }
+
   async function handleStartGame() {
     if (!room) return;
     const res = await emitStartGame(room.gameType, startOptions);
@@ -98,7 +105,7 @@ export function RoomPage() {
   if (kicked) {
     return (
       <p style={{ color: 'var(--text-muted)' }}>
-        你已在其他位置加入了新房间，正在返回大厅…
+        {kickedMessage}
       </p>
     );
   }
@@ -144,9 +151,19 @@ export function RoomPage() {
               {p.isBot && p.botDifficulty && ` · ${AI_DIFFICULTY_LABELS[p.botDifficulty]}`}
             </span>
             {isHost && p.role !== 'host' && !isPlaying && (
-              <button className="btn btn-secondary" onClick={() => handleToggleRole(p.id)}>
-                {p.role === 'spectator' ? '设为玩家' : '设为旁观'}
-              </button>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                {!p.isBot && (
+                  <button className="btn btn-secondary" onClick={() => handleToggleRole(p.id)}>
+                    {p.role === 'spectator' ? '设为玩家' : '设为旁观'}
+                  </button>
+                )}
+                <button
+                  className="btn btn-secondary"
+                  onClick={() => handleRemoveMember(p.id, p.displayName, p.isBot)}
+                >
+                  {p.isBot ? '移除' : '移出'}
+                </button>
+              </div>
             )}
           </div>
         ))}

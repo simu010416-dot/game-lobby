@@ -65,7 +65,9 @@ export function onRoomClosed(
   return () => socket?.off('room:closed', handler);
 }
 
-export function onRoomKicked(handler: (payload: { roomId: string }) => void) {
+export function onRoomKicked(
+  handler: (payload: { roomId: string; reason?: 'joined_other_room' | 'removed_by_host' }) => void,
+) {
   socket?.on('room:kicked', handler);
   return () => socket?.off('room:kicked', handler);
 }
@@ -79,6 +81,12 @@ export function closeRoom() {
 export function emitAddBot(difficulty: string) {
   return new Promise<{ ok: boolean; room?: RoomDetail; message?: string }>((resolve) => {
     socket?.emit('room:add-bot', { difficulty }, resolve);
+  });
+}
+
+export function emitRemoveMember(memberId: string) {
+  return new Promise<{ ok: boolean; room?: RoomDetail; message?: string }>((resolve) => {
+    socket?.emit('room:remove-member', { memberId }, resolve);
   });
 }
 

@@ -16,6 +16,7 @@ import { parsePairLines } from '@game-lobby/word-pairs';
 const joinSchema = z.object({ roomId: z.string().uuid() });
 const lobbySubscribeSchema = z.object({ gameType: z.enum(GAME_TYPE_ZOD_VALUES) });
 const addBotSchema = z.object({ difficulty: z.enum(['easy', 'medium', 'hard', 'expert']) });
+const removeMemberSchema = z.object({ memberId: z.string().uuid() });
 const setRolesSchema = z.object({
   activePlayerIds: z.array(z.string().uuid()),
   spectatorIds: z.array(z.string().uuid()),
@@ -131,7 +132,7 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
 
       for (const kicked of kickedSockets) {
         if (kicked.socketId === socket.id) continue;
-        io.to(kicked.socketId).emit('room:kicked', { roomId: kicked.roomId });
+        io.to(kicked.socketId).emit('room:kicked', { roomId: kicked.roomId, reason: 'joined_other_room' });
       }
 
       for (const left of leftRooms) {
@@ -220,6 +221,38 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
       }
       io.to(roomId).emit('room:updated', detail);
       cb?.({ ok: true, room: detail });
+    });
+
+    socket.on('room:remove-member', async (payload, cb) => {
+      const parsed = removeMemberSchema.safeParse(payload);
+      const roomId = getRoomId(socket);
+      if (!parsed.success || !roomId) {
+        cb?.({ ok: false });
+        return;
+      }
+
+      const member = await findMember(roomManager, roomId, user.id);
+      const result = await roomManager.removeMember(
+        roomId,
+        parsed.data.memberId,
+        member?.id ?? '',
+      );
+      if (!result) {
+        cb?.({ ok: false, message: '无法移除成员' });
+        return;
+      }
+      if ('error' in result) {
+        cb?.({ ok: false, message: result.error });
+        return;
+      }
+      if (result.kickedSocketId) {
+        io.to(result.kickedSocketId).emit('room:kicked', {
+          roomId,
+          reason: 'removed_by_host',
+        });
+      }
+      io.to(roomId).emit('room:updated', result.detail);
+      cb?.({ ok: true, room: result.detail });
     });
 
     socket.on('room:set-roles', async (payload, cb) => {

@@ -92,3 +92,35 @@ export async function addBot(page: Page): Promise<void> {
     await expect(list.getByText(/电脑-/)).toHaveCount(expectedCount, { timeout: 3000 });
   }).toPass({ timeout: 20_000 });
 }
+
+export async function joinRoomById(
+  page: Page,
+  gameType: 'undercover' | 'da_vinci_code' | 'draw_guess' | 'german_heart_attack',
+  roomId: string,
+): Promise<void> {
+  await page.goto(`/games/${gameType}/room/${roomId}`);
+  await expect(playerListSection(page)).toBeVisible();
+}
+
+function playerRow(page: Page, displayName: string | RegExp): Locator {
+  return playerListSection(page).locator('div').filter({ hasText: displayName }).first();
+}
+
+export async function removeMember(page: Page, displayName: string | RegExp): Promise<void> {
+  const list = playerListSection(page);
+  const row = playerRow(page, displayName);
+  const isBot = typeof displayName === 'object' || displayName.includes('电脑-');
+  const buttonName = isBot ? '移除' : '移出';
+
+  if (!isBot) {
+    page.once('dialog', (dialog) => void dialog.accept());
+  }
+
+  await row.getByRole('button', { name: buttonName }).click();
+
+  if (isBot) {
+    await expect(list.getByText(displayName)).toHaveCount(0);
+  } else {
+    await expect(list.getByText(displayName)).toHaveCount(0);
+  }
+}

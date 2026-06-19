@@ -443,16 +443,45 @@ export class RoomManager {
     return this.getRoomDetail(roomId);
   }
 
-  async removeMember(roomId: string, memberId: string, requesterId: string): Promise<RoomDetail | null> {
+  async removeMember(
+    roomId: string,
+    memberId: string,
+    requesterId: string,
+  ): Promise<{ detail: RoomDetail; kickedSocketId?: string } | { error: string } | null> {
     const detail = await this.getRoomDetail(roomId);
     const hostMember = detail?.players.find((p) => p.role === 'host');
-    if (!detail || hostMember?.id !== requesterId) return null;
+    if (!detail) return null;
+    if (hostMember?.id !== requesterId) {
+      return { error: '仅房主可移除成员' };
+    }
 
     const waiting = await this.assertWaitingRoom(roomId);
-    if (!waiting.ok) return null;
+    if (!waiting.ok) return { error: waiting.message };
 
-    await this.db.delete(roomMembers).where(eq(roomMembers.id, memberId));
-    return this.getRoomDetail(roomId);
+    const target = detail.players.find((p) => p.id === memberId);
+    if (!target) return { error: '成员不存在' };
+    if (target.role === 'host') return { error: '不能移除房主' };
+    if (target.id === requesterId) return { error: '不能移除自己' };
+
+    return this.runExclusive(`room:${roomId}`, async () => {
+      let kickedSocketId: string | undefined;
+      if (!target.isBot) {
+        for (const [sid, map] of this.socketToMember) {
+          if (map.memberId === memberId) {
+            kickedSocketId = sid;
+            this.socketToMember.delete(sid);
+            break;
+          }
+        }
+      }
+
+      await this.db.delete(roomMembers).where(eq(roomMembers.id, memberId));
+      await this.cleanupRoom(roomId);
+      this.touchRoom(roomId);
+
+      const updated = await this.getRoomDetail(roomId);
+      return updated ? { detail: updated, kickedSocketId } : null;
+    });
   }
 
   async setParticipantRoles(

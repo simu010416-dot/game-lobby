@@ -23,6 +23,7 @@ export interface UseRoomSessionResult {
   error: string;
   setError: (msg: string) => void;
   kicked: boolean;
+  kickedMessage: string;
   closed: boolean;
   closedMessage: string;
   gameType: GameType | null;
@@ -39,6 +40,7 @@ export function useRoomSession({
   const [closed, setClosed] = useState(false);
   const [closedMessage, setClosedMessage] = useState('房间已关闭，正在返回大厅…');
   const [kicked, setKicked] = useState(false);
+  const [kickedMessage, setKickedMessage] = useState('你已在其他位置加入了新房间，正在返回大厅…');
   const [gameType, setGameType] = useState<GameType | null>(null);
   const [gameState, setGameState] = useState<unknown>(null);
   const [error, setError] = useState('');
@@ -74,8 +76,13 @@ export function useRoomSession({
     });
     const unsubKicked = onRoomKicked((payload) => {
       if (payload.roomId === roomId) {
+        const message =
+          payload.reason === 'removed_by_host'
+            ? '你已被房主移出房间，正在返回大厅…'
+            : '你已在其他位置加入了新房间，正在返回大厅…';
+        setKickedMessage(message);
         setKicked(true);
-        navigate(lobbyPath, { replace: true });
+        navigate(lobbyPath, { replace: true, state: { notice: message } });
       }
     });
 
@@ -97,5 +104,5 @@ export function useRoomSession({
       .catch(() => {});
   }, [token, roomId]);
 
-  return { room, error, setError, kicked, closed, closedMessage, gameType, gameState };
+  return { room, error, setError, kicked, kickedMessage, closed, closedMessage, gameType, gameState };
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link, Navigate, useParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import type { GameType, RoomSummary } from '@game-lobby/shared';
 import { ALL_GAME_TYPES, GAME_META } from '@game-lobby/shared';
 import { useAuth } from '../context/AuthContext';
@@ -8,6 +8,8 @@ import { getSocket, subscribeLobby } from '../lib/socket';
 
 export function GameLobbyPage() {
   const { gameType: gameTypeParam } = useParams<{ gameType: string }>();
+  const location = useLocation();
+  const notice = (location.state as { notice?: string } | null)?.notice ?? null;
   const { token } = useAuth();
   const [rooms, setRooms] = useState<RoomSummary[]>([]);
   const [roomName, setRoomName] = useState('');
@@ -43,6 +45,9 @@ export function GameLobbyPage() {
 
   return (
     <div>
+      {notice && (
+        <p style={{ color: 'var(--text-muted)', margin: '0 0 1rem' }}>{notice}</p>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center', marginBottom: '1.5rem' }}>
         <div>
           <Link to="/" style={{ color: 'var(--text-muted)', fontSize: '0.9rem' }}>
