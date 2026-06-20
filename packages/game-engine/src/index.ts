@@ -11,6 +11,7 @@ import type { GoGameState, GoStartOptions } from '@game-lobby/game-go';
 import type { ChessGameState, ChessStartOptions } from '@game-lobby/game-chess';
 import type { ScriptMurderGameState, ScriptMurderStartOptions } from '@game-lobby/game-script-murder';
 import type { DwarfMineGameState, DwarfMineStartOptions } from '@game-lobby/game-dwarf-mine';
+import type { ChineseChessGameState, ChineseChessStartOptions } from '@game-lobby/game-chinese-chess';
 import { getGameModule } from './registry.js';
 
 export type GameState =
@@ -24,7 +25,8 @@ export type GameState =
   | GoGameState
   | ChessGameState
   | ScriptMurderGameState
-  | DwarfMineGameState;
+  | DwarfMineGameState
+  | ChineseChessGameState;
 
 export type GameStartOptionsMap = {
   undercover: UndercoverStartOptions;
@@ -38,6 +40,7 @@ export type GameStartOptionsMap = {
   chess: ChessStartOptions;
   script_murder: ScriptMurderStartOptions;
   dwarf_mine: DwarfMineStartOptions;
+  chinese_chess: ChineseChessStartOptions;
 };
 
 export type GameStartOptions<T extends GameType = GameType> = GameStartOptionsMap[T];
@@ -349,3 +352,29 @@ export {
   type DwarfMinePlayerState,
   type GameCard as DwarfMineGameCard,
 } from '@game-lobby/game-dwarf-mine';
+
+export {
+  createChineseChessGame,
+  applyChineseChessMove,
+  resignChineseChessGame,
+  offerChineseChessDraw,
+  respondChineseChessDraw,
+  getCurrentPlayerId as getChineseChessCurrentPlayerId,
+  getLegalMoves as getChineseChessLegalMoves,
+  replayChineseChessToIndex,
+  tickChineseChessGame,
+  generateBotChineseChessMove,
+  applyBotChineseChessMove,
+  chineseChessModule,
+  INITIAL_FEN as CHINESE_CHESS_INITIAL_FEN,
+  type ChineseChessGameState,
+  type ChineseChessPlayerState,
+  type ChineseChessColor,
+  type ChineseChessPhase,
+  type ChineseChessEndReason,
+  type ChineseChessLastMove,
+  type ChineseChessMoveOption,
+  type ChineseChessMoveRecord,
+  type ChineseChessTimeSettings,
+  type ChineseChessStartOptions,
+} from '@game-lobby/game-chinese-chess';

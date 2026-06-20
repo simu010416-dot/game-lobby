@@ -9,7 +9,8 @@ export type GameType =
   | 'go'
   | 'chess'
   | 'script_murder'
-  | 'dwarf_mine';
+  | 'dwarf_mine'
+  | 'chinese_chess';
 
 export type AiDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
 
@@ -170,6 +171,14 @@ export const GAME_META: Record<GameType, GameMetaEntry> = {
     botsAllowed: false,
     requiresPerPlayerState: true,
   },
+  chinese_chess: {
+    name: '中国象棋',
+    minPlayers: 2,
+    maxPlayers: 2,
+    description: '标准中国象棋，支持计时、求和、AI 与复盘。',
+    botsAllowed: true,
+    requiresPerPlayerState: false,
+  },
 };
 
 export const AI_DIFFICULTY_LABELS: Record<AiDifficulty, string> = {
@@ -191,6 +200,7 @@ export const ALL_GAME_TYPES: GameType[] = [
   'chess',
   'script_murder',
   'dwarf_mine',
+  'chinese_chess',
 ];
 
 /** Tuple for Zod `z.enum()` — single source with ALL_GAME_TYPES */

@@ -43,8 +43,8 @@ export function rotateConnections(conns: number, rotation: 0 | 90 | 180 | 270): 
 
 export function getCellConnections(cell: BoardCell): number[] {
   if (cell.cellType === 'start') {
-    // Saboteur 起点（梯子卡）：向北、东、南延伸，西侧为矿洞外壁
-    return [DIR_N | DIR_E | DIR_S];
+    // Saboteur 起点（梯子卡）：仅向东进入矿道，其余方向为岩壁
+    return [DIR_E];
   }
   if (cell.cellType === 'goal') {
     if (!cell.goalRevealed && cell.card === null) {

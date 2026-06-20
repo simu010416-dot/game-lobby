@@ -76,6 +76,14 @@ import {
 import { ScriptMurderRoomSettings } from './script-murder/RoomSettings';
 import { DwarfMineGame } from './dwarf-mine/DwarfMineGame';
 import { DwarfMineRoomSettings } from './dwarf-mine/RoomSettings';
+import { ChineseChessGame } from './chinese-chess/ChineseChessGame';
+import {
+  emitChineseChessMove,
+  emitChineseChessResign,
+  emitChineseChessOfferDraw,
+  emitChineseChessRespondDraw,
+} from './chinese-chess/socket';
+import { ChineseChessRoomSettings } from './chinese-chess/RoomSettings';
 
 export interface GameComponentProps {
   state: GameState;
@@ -274,6 +282,20 @@ function DwarfMineGameWrapper({ state, myMemberId, isSpectator }: GameComponentP
   );
 }
 
+function ChineseChessGameWrapper({ state, myMemberId, isSpectator }: GameComponentProps) {
+  return (
+    <ChineseChessGame
+      state={state as import('@game-lobby/game-engine').ChineseChessGameState}
+      myMemberId={myMemberId}
+      isSpectator={isSpectator}
+      onMove={emitChineseChessMove}
+      onResign={emitChineseChessResign}
+      onOfferDraw={emitChineseChessOfferDraw}
+      onRespondDraw={emitChineseChessRespondDraw}
+    />
+  );
+}
+
 export const GAME_REGISTRY: Record<GameType, WebGameModule> = {
   undercover: {
     Component: UndercoverGameWrapper,
@@ -328,6 +350,11 @@ export const GAME_REGISTRY: Record<GameType, WebGameModule> = {
     Component: DwarfMineGameWrapper,
     RoomSettings: DwarfMineRoomSettings,
     isEnded: (state) => isGameEnded('dwarf_mine', state as GameState),
+  },
+  chinese_chess: {
+    Component: ChineseChessGameWrapper,
+    RoomSettings: ChineseChessRoomSettings,
+    isEnded: (state) => isGameEnded('chinese_chess', state as GameState),
   },
 };
 

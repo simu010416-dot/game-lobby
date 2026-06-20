@@ -177,6 +177,9 @@ importers:
       '@game-lobby/game-chess':
         specifier: workspace:*
         version: link:../games/chess
+      '@game-lobby/game-chinese-chess':
+        specifier: workspace:*
+        version: link:../games/chinese-chess
       '@game-lobby/game-core':
         specifier: workspace:*
         version: link:../game-core
@@ -242,6 +245,22 @@ importers:
       chess.js:
         specifier: ^1.0.0-beta.8
         version: 1.4.0
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.6(@types/node@22.19.21)(tsx@4.22.4)
+
+  packages/games/chinese-chess:
+    dependencies:
+      '@game-lobby/game-core':
+        specifier: workspace:*
+        version: link:../../game-core
+      '@game-lobby/shared':
+        specifier: workspace:*
+        version: link:../../shared
     devDependencies:
       typescript:
         specifier: ^5.7.2

@@ -126,6 +126,7 @@ export function emitStartGame(
     incrementSec?: number;
     scriptId?: string;
     dwarfMineMode?: 'base' | 'expansion';
+    unlimitedTime?: boolean;
   } = {},
 ) {
   return new Promise<{ ok: boolean; message?: string }>((resolve) => {
@@ -197,6 +198,12 @@ export function emitStartGame(
     } else if (gameType === 'dwarf_mine') {
       payload = {
         dwarfMineMode: options.dwarfMineMode ?? 'base',
+      };
+    } else if (gameType === 'chinese_chess') {
+      payload = {
+        mainTimeSec: options.mainTimeSec ?? 600,
+        incrementSec: options.incrementSec ?? 5,
+        unlimitedTime: options.unlimitedTime ?? false,
       };
     }
     socket?.emit('game:start', payload, resolve);

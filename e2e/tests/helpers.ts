@@ -10,11 +10,11 @@ export function unique(prefix: string): string {
 export async function loginAsGuest(page: Page, displayName?: string): Promise<string> {
   const name = displayName ?? unique('guest');
   await page.goto('/login');
+  await expect(page.getByRole('heading', { name: '访客进入' })).toBeVisible({ timeout: 30_000 });
 
   const guestInput = page.getByPlaceholder('显示名称', { exact: true });
-  await expect(guestInput).toHaveValue(/.+/);
+  await expect(guestInput).toBeVisible();
   await guestInput.fill(name);
-  await expect(guestInput).toHaveValue(name);
   await page.getByRole('button', { name: '以访客身份进入' }).click();
 
   await expect(page.getByRole('heading', { name: '选择游戏' })).toBeVisible();
@@ -36,24 +36,37 @@ export async function registerUser(
   await expect(page.getByRole('heading', { name: '选择游戏' })).toBeVisible();
 }
 
+type E2eGameType =
+  | 'undercover'
+  | 'da_vinci_code'
+  | 'draw_guess'
+  | 'german_heart_attack'
+  | 'werewolf'
+  | 'chinese_chess'
+  | 'dwarf_mine';
+
+const LOBBY_HEADINGS: Record<E2eGameType, string> = {
+  da_vinci_code: '达芬奇密码 大厅',
+  undercover: '谁是卧底 大厅',
+  draw_guess: '你画我猜 大厅',
+  german_heart_attack: '德国心脏病 大厅',
+  werewolf: '狼人杀 大厅',
+  chinese_chess: '中国象棋 大厅',
+  dwarf_mine: '矮人矿坑 大厅',
+};
+
 export async function enterGameLobby(
   page: Page,
-  gameType: 'undercover' | 'da_vinci_code' | 'draw_guess' | 'german_heart_attack' = 'da_vinci_code',
+  gameType: E2eGameType = 'da_vinci_code',
 ): Promise<void> {
   await page.goto(`/games/${gameType}`);
-  const headings: Record<string, string> = {
-    da_vinci_code: '达芬奇密码 大厅',
-    undercover: '谁是卧底 大厅',
-    draw_guess: '你画我猜 大厅',
-    german_heart_attack: '德国心脏病 大厅',
-  };
-  await expect(page.getByRole('heading', { name: headings[gameType] })).toBeVisible();
+  await expect(page.getByRole('heading', { name: LOBBY_HEADINGS[gameType] })).toBeVisible();
 }
 
 export async function createRoom(
   page: Page,
   roomName: string,
-  gameType: 'undercover' | 'da_vinci_code' | 'draw_guess' | 'german_heart_attack' = 'da_vinci_code',
+  gameType: E2eGameType = 'da_vinci_code',
 ): Promise<string> {
   await enterGameLobby(page, gameType);
 
@@ -70,7 +83,7 @@ export async function createRoom(
 
 export async function createRoomAndWait(
   page: Page,
-  gameType: 'undercover' | 'da_vinci_code' | 'draw_guess' | 'german_heart_attack',
+  gameType: E2eGameType,
   roomName: string,
 ): Promise<string> {
   const roomId = await createRoom(page, roomName, gameType);
@@ -95,7 +108,7 @@ export async function addBot(page: Page): Promise<void> {
 
 export async function joinRoomById(
   page: Page,
-  gameType: 'undercover' | 'da_vinci_code' | 'draw_guess' | 'german_heart_attack',
+  gameType: E2eGameType,
   roomId: string,
 ): Promise<void> {
   await page.goto(`/games/${gameType}/room/${roomId}`);

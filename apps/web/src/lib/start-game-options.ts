@@ -25,4 +25,5 @@ export type GameStartOptionsPayload = {
   incrementSec?: number;
   scriptId?: string;
   dwarfMineMode?: 'base' | 'expansion';
+  unlimitedTime?: boolean;
 };

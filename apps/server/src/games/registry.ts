@@ -10,6 +10,7 @@ import { registerGoSockets } from './go/socket.js';
 import { registerChessSockets } from './chess/socket.js';
 import { registerScriptMurderSockets } from './script-murder/socket.js';
 import { registerDwarfMineSockets } from './dwarf-mine/socket.js';
+import { registerChineseChessSockets } from './chinese-chess/socket.js';
 import type { GameSocketDeps } from './undercover/socket.js';
 
 export type { GameSocketDeps };
@@ -29,4 +30,5 @@ export function registerAllGameSockets(
   registerChessSockets(socket, deps);
   registerScriptMurderSockets(socket, deps);
   registerDwarfMineSockets(socket, deps);
+  registerChineseChessSockets(socket, deps);
 }

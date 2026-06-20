@@ -26,6 +26,7 @@
     "@game-lobby/game-chess": "workspace:*",
     "@game-lobby/game-script-murder": "workspace:*",
     "@game-lobby/game-dwarf-mine": "workspace:*",
+    "@game-lobby/game-chinese-chess": "workspace:*",
     "@game-lobby/game-werewolf": "workspace:*",
     "@game-lobby/game-undercover": "workspace:*",
     "@game-lobby/shared": "workspace:*"

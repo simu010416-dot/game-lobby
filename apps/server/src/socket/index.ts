@@ -11,6 +11,7 @@ import { startDrawGuessTimer } from '../games/draw-guess/socket.js';
 import { startActGuessTimer } from '../games/act-guess/socket.js';
 import { startGoTimer } from '../games/go/socket.js';
 import { startChessTimer } from '../games/chess/socket.js';
+import { startChineseChessTimer } from '../games/chinese-chess/socket.js';
 import { resolveWordPool } from '../services/word-pack-service.js';
 import { resolvePairPool } from '../services/word-pair-service.js';
 import { getScriptForGame } from '../services/script-murder-service.js';
@@ -56,6 +57,7 @@ const startGameSchema = z
     incrementSec: z.number().int().min(0).max(60).optional(),
     scriptId: z.string().uuid().optional(),
     dwarfMineMode: z.enum(['base', 'expansion']).optional(),
+    unlimitedTime: z.boolean().optional(),
   })
   .optional();
 
@@ -480,6 +482,13 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
         startOptions = {
           mode: data?.dwarfMineMode ?? 'base',
         };
+      } else if (gameType === 'chinese_chess') {
+        const data = parsedStart.success ? parsedStart.data : undefined;
+        startOptions = {
+          mainTimeSec: data?.mainTimeSec ?? 600,
+          incrementSec: data?.incrementSec ?? 5,
+          unlimitedTime: data?.unlimitedTime ?? false,
+        };
       }
 
       const result = await roomManager.startNextGame(roomId, hostMember.id, startOptions);
@@ -531,6 +540,12 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
     (roomId, state) => emitRoomIfGameEnded(io, roomManager, roomId, state),
   );
   startChessTimer(
+    io,
+    roomManager,
+    (roomId) => emitGameState(io, roomManager, roomId),
+    (roomId, state) => emitRoomIfGameEnded(io, roomManager, roomId, state),
+  );
+  startChineseChessTimer(
     io,
     roomManager,
     (roomId) => emitGameState(io, roomManager, roomId),

@@ -3,6 +3,14 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    commonjsOptions: {
+      include: [/xiangqi\.cjs/, /node_modules/],
+    },
+  },
+  optimizeDeps: {
+    include: ['@game-lobby/game-chinese-chess > ../vendor/xiangqi.cjs'],
+  },
   server: {
     port: 7125,
     strictPort: true,

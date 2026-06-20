@@ -179,8 +179,6 @@ function PathArt({
   const cy = 50;
   const r = 36;
   const width = SIZE_MAP[size].tunnel;
-  const openDirs = [DIR_N, DIR_E, DIR_S, DIR_W].filter((d) => connections & d);
-  const isDeadEnd = openDirs.length === 1;
 
   function renderTunnel(conns: number, opacity = 1) {
     const dirs = [DIR_N, DIR_E, DIR_S, DIR_W].filter((d) => conns & d);

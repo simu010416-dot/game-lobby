@@ -56,8 +56,9 @@ export function DwarfMineGame({ state, myMemberId, isSpectator }: Props) {
   const current = state.players[state.currentPlayerIndex];
   const isMyTurn = !isSpectator && current?.id === myMemberId && state.phase === 'playing';
   const selectedHandCard = me?.hand.find((c) => c.id === selectedCard) ?? null;
-  const selectedPathCard =
-    selectedHandCard?.def.kind === 'path' ? selectedHandCard : null;
+  const selectedPathDef =
+    selectedHandCard?.def.kind === 'path' ? selectedHandCard.def : null;
+  const selectedPathCard = selectedPathDef ? selectedHandCard : null;
   const canPlayPathCard =
     Boolean(me) &&
     !me!.isTrapped &&
@@ -67,15 +68,15 @@ export function DwarfMineGame({ state, myMemberId, isSpectator }: Props) {
 
   const validPlacements = useMemo(() => {
     const map = new Map<string, 0 | 90 | 180 | 270>();
-    if (!selectedPathCard || !canPlayPathCard) return map;
+    if (!selectedPathDef || !canPlayPathCard) return map;
     for (const { row, col, rotation: rot } of findValidDwarfMinePathPlacements(
       state.board,
-      selectedPathCard.def,
+      selectedPathDef,
     )) {
       map.set(`${row},${col}`, rot);
     }
     return map;
-  }, [selectedPathCard, state.board, canPlayPathCard]);
+  }, [selectedPathDef, state.board, canPlayPathCard]);
 
   useEffect(() => {
     if (!selectedPathCard || validPlacements.size === 0) return;
@@ -163,7 +164,6 @@ export function DwarfMineGame({ state, myMemberId, isSpectator }: Props) {
             const cell = state.board[row]?.[col];
             const isGoal = GOAL_ROWS.includes(row as (typeof GOAL_ROWS)[number]) && col === GOAL_COL;
             const isStart = cell?.cellType === 'start';
-            const hasCard = Boolean(cell?.card);
             const key = `${row},${col}`;
             const canPlaceHere = validPlacements.has(key);
             const isEmpty = cell?.cellType === 'empty';

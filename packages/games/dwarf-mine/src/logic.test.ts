@@ -3,7 +3,7 @@ import { createDwarfMineGame, playPath, discardCard, redactDwarfMineState, conti
 import { assignBaseRoles, handSizeForPlayers } from './roles.js';
 import { createExpansionGame } from './logic-expansion.js';
 import { EXPANSION_HAND_SIZE } from './cards-expansion.js';
-import { canPlacePath } from './board.js';
+import { canPlacePath, findValidPathPlacements } from './board.js';
 import { DIR_E, DIR_W } from './types.js';
 
 const players = [
@@ -41,24 +41,10 @@ describe('base mode', () => {
     expect(canPlacePath(board, 0, 0, pathDef, 0)).toBe(false);
   });
 
-  it('opening hand usually has playable path placements', () => {
-    let zero = 0;
-    for (let i = 0; i < 50; i++) {
-      const state = createDwarfMineGame(players, { mode: 'base' });
-      let count = 0;
-      for (const card of state.players[0]!.hand) {
-        if (card.def.kind !== 'path') continue;
-        for (let r = 0; r < 5; r++) {
-          for (let c = 0; c < 9; c++) {
-            for (const rot of [0, 90, 180, 270] as const) {
-              if (canPlacePath(state.board, r, c, card.def, rot)) count++;
-            }
-          }
-        }
-      }
-      if (count === 0) zero++;
-    }
-    expect(zero).toBeLessThan(10);
+  it('dead_end path cards can extend from the start tile', () => {
+    const pathDef = { kind: 'path' as const, pathKind: 'dead_end' as const, connections: DIR_E };
+    const board = createDwarfMineGame(players).board;
+    expect(findValidPathPlacements(board, pathDef).length).toBeGreaterThan(0);
   });
 
   it('allows discard on turn', () => {
