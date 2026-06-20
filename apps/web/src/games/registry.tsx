@@ -74,6 +74,8 @@ import {
   emitScriptMurderVote,
 } from './script-murder/socket';
 import { ScriptMurderRoomSettings } from './script-murder/RoomSettings';
+import { DwarfMineGame } from './dwarf-mine/DwarfMineGame';
+import { DwarfMineRoomSettings } from './dwarf-mine/RoomSettings';
 
 export interface GameComponentProps {
   state: GameState;
@@ -262,6 +264,16 @@ function ScriptMurderGameWrapper({
   );
 }
 
+function DwarfMineGameWrapper({ state, myMemberId, isSpectator }: GameComponentProps) {
+  return (
+    <DwarfMineGame
+      state={state as import('@game-lobby/game-engine').DwarfMineGameState}
+      myMemberId={myMemberId}
+      isSpectator={isSpectator}
+    />
+  );
+}
+
 export const GAME_REGISTRY: Record<GameType, WebGameModule> = {
   undercover: {
     Component: UndercoverGameWrapper,
@@ -311,6 +323,11 @@ export const GAME_REGISTRY: Record<GameType, WebGameModule> = {
     Component: ScriptMurderGameWrapper,
     RoomSettings: ScriptMurderRoomSettings,
     isEnded: (state) => isGameEnded('script_murder', state as GameState),
+  },
+  dwarf_mine: {
+    Component: DwarfMineGameWrapper,
+    RoomSettings: DwarfMineRoomSettings,
+    isEnded: (state) => isGameEnded('dwarf_mine', state as GameState),
   },
 };
 

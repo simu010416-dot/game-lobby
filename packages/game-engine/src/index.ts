@@ -10,6 +10,7 @@ import type { GomokuGameState, GomokuStartOptions } from '@game-lobby/game-gomok
 import type { GoGameState, GoStartOptions } from '@game-lobby/game-go';
 import type { ChessGameState, ChessStartOptions } from '@game-lobby/game-chess';
 import type { ScriptMurderGameState, ScriptMurderStartOptions } from '@game-lobby/game-script-murder';
+import type { DwarfMineGameState, DwarfMineStartOptions } from '@game-lobby/game-dwarf-mine';
 import { getGameModule } from './registry.js';
 
 export type GameState =
@@ -22,7 +23,8 @@ export type GameState =
   | GomokuGameState
   | GoGameState
   | ChessGameState
-  | ScriptMurderGameState;
+  | ScriptMurderGameState
+  | DwarfMineGameState;
 
 export type GameStartOptionsMap = {
   undercover: UndercoverStartOptions;
@@ -35,6 +37,7 @@ export type GameStartOptionsMap = {
   go: GoStartOptions;
   chess: ChessStartOptions;
   script_murder: ScriptMurderStartOptions;
+  dwarf_mine: DwarfMineStartOptions;
 };
 
 export type GameStartOptions<T extends GameType = GameType> = GameStartOptionsMap[T];
@@ -314,3 +317,35 @@ export {
   type ScriptPhaseType,
   type SpeechMessage as ScriptMurderSpeechMessage,
 } from '@game-lobby/game-script-murder';
+
+export {
+  createDwarfMineGame,
+  playPath as playDwarfMinePath,
+  playAction as playDwarfMineAction,
+  discardCard as discardDwarfMineCard,
+  discardTwo as discardDwarfMineTwo,
+  passTurn as passDwarfMineTurn,
+  mapPeek as dwarfMineMapPeek,
+  rolePeekContinue as dwarfMineRolePeekContinue,
+  pickGold as pickDwarfMineGold,
+  stealGoldFrom as stealDwarfMineGold,
+  skipSteal as skipDwarfMineSteal,
+  continueRound as continueDwarfMineRound,
+  redactDwarfMineState,
+  isDwarfMineEnded,
+  cardLabel as dwarfMineCardLabel,
+  roleLabel as dwarfMineRoleLabel,
+  canPlacePath as canPlaceDwarfMinePath,
+  findValidPathPlacements as findValidDwarfMinePathPlacements,
+  dwarfMineModule,
+  BOARD_ROWS as DWARF_MINE_BOARD_ROWS,
+  BOARD_COLS as DWARF_MINE_BOARD_COLS,
+  GOAL_ROWS,
+  GOAL_COL,
+  type DwarfMineGameState,
+  type DwarfMineStartOptions,
+  type DwarfMineMode,
+  type DwarfMinePhase,
+  type DwarfMinePlayerState,
+  type GameCard as DwarfMineGameCard,
+} from '@game-lobby/game-dwarf-mine';

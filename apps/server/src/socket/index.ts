@@ -55,6 +55,7 @@ const startGameSchema = z
     byoyomiPeriods: z.number().int().min(0).max(10).optional(),
     incrementSec: z.number().int().min(0).max(60).optional(),
     scriptId: z.string().uuid().optional(),
+    dwarfMineMode: z.enum(['base', 'expansion']).optional(),
   })
   .optional();
 
@@ -473,6 +474,11 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
           scriptTitle: script.title,
           script: script.content,
           hostMemberId: hostMember.id,
+        };
+      } else if (gameType === 'dwarf_mine') {
+        const data = parsedStart.success ? parsedStart.data : undefined;
+        startOptions = {
+          mode: data?.dwarfMineMode ?? 'base',
         };
       }
 

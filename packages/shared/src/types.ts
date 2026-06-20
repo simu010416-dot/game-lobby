@@ -8,7 +8,8 @@ export type GameType =
   | 'gomoku'
   | 'go'
   | 'chess'
-  | 'script_murder';
+  | 'script_murder'
+  | 'dwarf_mine';
 
 export type AiDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
 
@@ -161,6 +162,14 @@ export const GAME_META: Record<GameType, GameMetaEntry> = {
     requiresPerPlayerState: true,
     hasScripts: true,
   },
+  dwarf_mine: {
+    name: '矮人矿坑',
+    minPlayers: 3,
+    maxPlayers: 10,
+    description: '隐藏身份阵营，铺设通道寻找金矿；支持基本版与 Saboteur 2 扩展版，3 轮累计金块最多者胜。',
+    botsAllowed: false,
+    requiresPerPlayerState: true,
+  },
 };
 
 export const AI_DIFFICULTY_LABELS: Record<AiDifficulty, string> = {
@@ -181,6 +190,7 @@ export const ALL_GAME_TYPES: GameType[] = [
   'go',
   'chess',
   'script_murder',
+  'dwarf_mine',
 ];
 
 /** Tuple for Zod `z.enum()` — single source with ALL_GAME_TYPES */

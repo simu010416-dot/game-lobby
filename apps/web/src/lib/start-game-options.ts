@@ -24,4 +24,5 @@ export type GameStartOptionsPayload = {
   byoyomiPeriods?: number;
   incrementSec?: number;
   scriptId?: string;
+  dwarfMineMode?: 'base' | 'expansion';
 };

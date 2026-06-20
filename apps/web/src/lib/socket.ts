@@ -124,6 +124,8 @@ export function emitStartGame(
     byoyomiSec?: number;
     byoyomiPeriods?: number;
     incrementSec?: number;
+    scriptId?: string;
+    dwarfMineMode?: 'base' | 'expansion';
   } = {},
 ) {
   return new Promise<{ ok: boolean; message?: string }>((resolve) => {
@@ -191,6 +193,10 @@ export function emitStartGame(
       payload = {
         mainTimeSec: options.mainTimeSec ?? 600,
         incrementSec: options.incrementSec ?? 5,
+      };
+    } else if (gameType === 'dwarf_mine') {
+      payload = {
+        dwarfMineMode: options.dwarfMineMode ?? 'base',
       };
     }
     socket?.emit('game:start', payload, resolve);
