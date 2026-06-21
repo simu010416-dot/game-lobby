@@ -29,4 +29,5 @@ export type GameStartOptionsPayload = {
   maxLevels?: number;
   levelTimeLimitSec?: number;
   enableMovingPig?: boolean;
+  useLadyOfLake?: boolean;
 };

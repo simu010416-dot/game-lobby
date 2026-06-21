@@ -102,6 +102,17 @@ import {
   emitLifeboatSkipThirst,
   emitLifeboatSupplyPick,
 } from './lifeboat/socket';
+import { AvalonGame } from './avalon/AvalonGame';
+import {
+  emitAssassinate,
+  emitContinue as emitAvalonContinue,
+  emitEvilChat,
+  emitLadyPick,
+  emitMissionCard,
+  emitProposeTeam,
+  emitTeamVote,
+} from './avalon/socket';
+import { AvalonRoomSettings } from './avalon/RoomSettings';
 
 export interface GameComponentProps {
   state: GameState;
@@ -345,6 +356,23 @@ function LifeboatGameWrapper({ state, myMemberId, isSpectator }: GameComponentPr
   );
 }
 
+function AvalonGameWrapper({ state, myMemberId, isSpectator }: GameComponentProps) {
+  return (
+    <AvalonGame
+      state={state as import('@game-lobby/game-engine').AvalonGameState}
+      myMemberId={myMemberId}
+      isSpectator={isSpectator}
+      onProposeTeam={emitProposeTeam}
+      onTeamVote={emitTeamVote}
+      onMissionCard={emitMissionCard}
+      onContinue={emitAvalonContinue}
+      onLadyPick={emitLadyPick}
+      onAssassinate={emitAssassinate}
+      onEvilChat={emitEvilChat}
+    />
+  );
+}
+
 export const GAME_REGISTRY: Record<GameType, WebGameModule> = {
   undercover: {
     Component: UndercoverGameWrapper,
@@ -413,6 +441,11 @@ export const GAME_REGISTRY: Record<GameType, WebGameModule> = {
   lifeboat: {
     Component: LifeboatGameWrapper,
     isEnded: (state) => isGameEnded('lifeboat', state as GameState),
+  },
+  avalon: {
+    Component: AvalonGameWrapper,
+    RoomSettings: AvalonRoomSettings,
+    isEnded: (state) => isGameEnded('avalon', state as GameState),
   },
 };
 

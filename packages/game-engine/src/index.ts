@@ -14,6 +14,7 @@ import type { DwarfMineGameState, DwarfMineStartOptions } from '@game-lobby/game
 import type { ChineseChessGameState, ChineseChessStartOptions } from '@game-lobby/game-chinese-chess';
 import type { GoldMinerGameState, GoldMinerStartOptions } from '@game-lobby/game-gold-miner';
 import type { LifeboatGameState, LifeboatStartOptions } from '@game-lobby/game-lifeboat';
+import type { AvalonGameState, AvalonStartOptions } from '@game-lobby/game-avalon';
 import { getGameModule } from './registry.js';
 
 export type GameState =
@@ -30,7 +31,8 @@ export type GameState =
   | DwarfMineGameState
   | ChineseChessGameState
   | GoldMinerGameState
-  | LifeboatGameState;
+  | LifeboatGameState
+  | AvalonGameState;
 
 export type GameStartOptionsMap = {
   undercover: UndercoverStartOptions;
@@ -47,6 +49,7 @@ export type GameStartOptionsMap = {
   chinese_chess: ChineseChessStartOptions;
   gold_miner: GoldMinerStartOptions;
   lifeboat: LifeboatStartOptions;
+  avalon: AvalonStartOptions;
 };
 
 export type GameStartOptions<T extends GameType = GameType> = GameStartOptionsMap[T];
@@ -445,3 +448,35 @@ export {
   ALL_CHARACTERS,
   CHARACTER_BY_ID,
 } from '@game-lobby/game-lifeboat';
+
+export {
+  createAvalonGame,
+  proposeTeam,
+  submitTeamVote,
+  submitMissionCard,
+  advanceFromMissionReveal,
+  submitLadyPick,
+  submitAssassination,
+  sendEvilChat,
+  redactAvalonState,
+  validatePlayerCount,
+  getTeamSize,
+  failsRequired,
+  isEvilRole,
+  isGoodRole,
+  ROLE_LABELS as AVALON_ROLE_LABELS,
+  QUEST_TEAM_SIZES,
+  ROLE_PRESETS as AVALON_ROLE_PRESETS,
+  avalonModule,
+  type AvalonGameState,
+  type AvalonPlayerState,
+  type AvalonPhase,
+  type AvalonRole,
+  type AvalonRoleOrHidden,
+  type AvalonStartOptions,
+  type AvalonWinner,
+  type AvalonViewerInfo,
+  type EvilChatMessage,
+  type QuestResult,
+  type LadyRecord,
+} from '@game-lobby/game-avalon';

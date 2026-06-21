@@ -19,6 +19,7 @@
     { "path": "../games/chess" },
     { "path": "../games/werewolf" },
     { "path": "../games/script-murder" },
+    { "path": "../games/avalon" },
     { "path": "../games/lifeboat" }
   ]
 }

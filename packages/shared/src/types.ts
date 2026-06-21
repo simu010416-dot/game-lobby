@@ -12,7 +12,8 @@ export type GameType =
   | 'dwarf_mine'
   | 'chinese_chess'
   | 'gold_miner'
-  | 'lifeboat';
+  | 'lifeboat'
+  | 'avalon';
 
 export type AiDifficulty = 'easy' | 'medium' | 'hard' | 'expert';
 
@@ -197,6 +198,14 @@ export const GAME_META: Record<GameType, GameMetaEntry> = {
     botsAllowed: false,
     requiresPerPlayerState: true,
   },
+  avalon: {
+    name: '阿瓦隆',
+    minPlayers: 5,
+    maxPlayers: 10,
+    description: '亚瑟王阵营与莫德雷德爪牙对抗，组队执行任务；好人三胜后刺客可刺杀梅林。',
+    botsAllowed: true,
+    requiresPerPlayerState: true,
+  },
 };
 
 export const AI_DIFFICULTY_LABELS: Record<AiDifficulty, string> = {
@@ -221,6 +230,7 @@ export const ALL_GAME_TYPES: GameType[] = [
   'chinese_chess',
   'gold_miner',
   'lifeboat',
+  'avalon',
 ];
 
 /** Tuple for Zod `z.enum()` — single source with ALL_GAME_TYPES */

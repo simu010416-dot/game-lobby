@@ -64,6 +64,7 @@ const startGameSchema = z
     maxLevels: z.number().int().min(3).max(10).optional(),
     levelTimeLimitSec: z.number().int().min(30).max(300).optional(),
     enableMovingPig: z.boolean().optional(),
+    useLadyOfLake: z.boolean().optional(),
   })
   .optional();
 
@@ -520,6 +521,11 @@ export function setupSocketHandlers(io: Server, db: Database, roomManager: RoomM
         };
       } else if (gameType === 'lifeboat') {
         startOptions = { includeExpansions: false };
+      } else if (gameType === 'avalon') {
+        const data = parsedStart.success ? parsedStart.data : undefined;
+        startOptions = {
+          useLadyOfLake: data?.useLadyOfLake ?? true,
+        };
       }
 
       const result = await roomManager.startNextGame(roomId, hostMember.id, startOptions);

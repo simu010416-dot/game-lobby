@@ -174,6 +174,9 @@ importers:
       '@game-lobby/game-act-guess':
         specifier: workspace:*
         version: link:../games/act-guess
+      '@game-lobby/game-avalon':
+        specifier: workspace:*
+        version: link:../games/avalon
       '@game-lobby/game-chess':
         specifier: workspace:*
         version: link:../games/chess
@@ -225,6 +228,22 @@ importers:
         version: 5.9.3
 
   packages/games/act-guess:
+    dependencies:
+      '@game-lobby/game-core':
+        specifier: workspace:*
+        version: link:../../game-core
+      '@game-lobby/shared':
+        specifier: workspace:*
+        version: link:../../shared
+    devDependencies:
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.6(@types/node@22.19.21)(tsx@4.22.4)
+
+  packages/games/avalon:
     dependencies:
       '@game-lobby/game-core':
         specifier: workspace:*

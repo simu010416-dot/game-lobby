@@ -130,6 +130,7 @@ export function emitStartGame(
     maxLevels?: number;
     levelTimeLimitSec?: number;
     enableMovingPig?: boolean;
+    useLadyOfLake?: boolean;
   } = {},
 ) {
   return new Promise<{ ok: boolean; message?: string }>((resolve) => {
@@ -213,6 +214,10 @@ export function emitStartGame(
         maxLevels: options.maxLevels ?? 5,
         levelTimeLimitSec: options.levelTimeLimitSec ?? 90,
         enableMovingPig: options.enableMovingPig ?? true,
+      };
+    } else if (gameType === 'avalon') {
+      payload = {
+        useLadyOfLake: options.useLadyOfLake ?? true,
       };
     }
     socket?.emit('game:start', payload, resolve);

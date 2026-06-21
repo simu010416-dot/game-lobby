@@ -14,6 +14,7 @@ import { dwarfMineModule } from '@game-lobby/game-dwarf-mine';
 import { chineseChessModule } from '@game-lobby/game-chinese-chess';
 import { goldMinerModule } from '@game-lobby/game-gold-miner';
 import { lifeboatModule } from '@game-lobby/game-lifeboat';
+import { avalonModule } from '@game-lobby/game-avalon';
 
 export const gameRegistry: Record<GameType, GameModule<unknown, unknown>> = {
   undercover: undercoverModule as GameModule<unknown, unknown>,
@@ -30,6 +31,7 @@ export const gameRegistry: Record<GameType, GameModule<unknown, unknown>> = {
   chinese_chess: chineseChessModule as GameModule<unknown, unknown>,
   gold_miner: goldMinerModule as GameModule<unknown, unknown>,
   lifeboat: lifeboatModule as GameModule<unknown, unknown>,
+  avalon: avalonModule as GameModule<unknown, unknown>,
 };
 
 export function getGameModule(gameType: GameType): GameModule<unknown, unknown> {

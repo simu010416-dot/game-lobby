@@ -12,6 +12,7 @@ import { registerScriptMurderSockets } from './script-murder/socket.js';
 import { registerDwarfMineSockets } from './dwarf-mine/socket.js';
 import { registerChineseChessSockets } from './chinese-chess/socket.js';
 import { registerGoldMinerSockets } from './gold-miner/socket.js';
+import { registerAvalonSockets } from './avalon/socket.js';
 import { registerLifeboatSockets } from './lifeboat/socket.js';
 import type { GameSocketDeps } from './undercover/socket.js';
 
@@ -35,4 +36,5 @@ export function registerAllGameSockets(
   registerChineseChessSockets(socket, deps);
   registerGoldMinerSockets(socket, deps);
   registerLifeboatSockets(socket, deps);
+  registerAvalonSockets(socket, deps);
 }
